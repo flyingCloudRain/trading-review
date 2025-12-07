@@ -537,31 +537,14 @@ try:
         df_display = df_focused_indices[['name', 'code', 'currentPrice', 'changePercent', 'change']].copy()
         df_display.columns = ['指数名称', '指数代码', '最新价', '涨跌幅(%)', '涨跌额']
         
-        # 保存原始涨跌幅用于样式判断
-        change_percent_values = df_focused_indices['changePercent'].values
-        
         # 格式化数值
         df_display['最新价'] = df_display['最新价'].apply(lambda x: f"{x:.2f}")
         df_display['涨跌幅(%)'] = df_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%")
         df_display['涨跌额'] = df_display['涨跌额'].apply(lambda x: f"{x:+.2f}")
         
-        # 定义样式函数：只对涨跌幅>0的单元格应用红色背景
-        def apply_cell_style(df):
-            """只对涨跌幅列中涨跌幅>0的单元格应用红色背景"""
-            styles = pd.DataFrame('', index=df.index, columns=df.columns)
-            # 只对涨跌幅列应用样式
-            for idx in df.index:
-                change_pct = change_percent_values[idx]
-                if change_pct > 0:
-                    styles.loc[idx, '涨跌幅(%)'] = 'background-color: #fee2e2'  # 红色背景（上涨）
-            return styles
-        
-        # 使用pandas Styler应用样式
-        styled_df = df_display.style.apply(apply_cell_style, axis=None)
-        
-        # 显示样式化的表格
+        # 显示表格（无背景色）
         st.dataframe(
-            styled_df,
+            df_display,
             use_container_width=True,
             hide_index=True
         )
