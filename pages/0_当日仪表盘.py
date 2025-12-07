@@ -81,22 +81,13 @@ st.markdown('<h1 class="main-header">📊 仪表盘</h1>', unsafe_allow_html=Tru
 today = get_utc8_date()
 default_date = get_data_date()  # 默认使用数据日期（自动判断）
 
-col_date, col_clear = st.columns([3, 1])
-with col_date:
-    selected_date = st.date_input(
-        "📅 选择日期",
-        value=default_date,
-        max_value=today,
-        label_visibility="visible",
-        help="选择要查看的日期，默认显示最新可用数据"
-    )
-
-with col_clear:
-    st.write("")  # 占位
-    st.write("")  # 占位
-    if st.button("🔄 清除缓存", help="清除数据缓存，重新加载数据"):
-        load_daily_data.clear()
-        st.rerun()
+selected_date = st.date_input(
+    "📅 选择日期",
+    value=default_date,
+    max_value=today,
+    label_visibility="visible",
+    help="选择要查看的日期，默认显示最新可用数据"
+)
 
 # 处理日期
 if selected_date is None:
