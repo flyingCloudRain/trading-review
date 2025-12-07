@@ -1,0 +1,114 @@
+from typing import List, Dict, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import func, and_
+from datetime import date, datetime, time
+from models.sector_history import SectorHistory
+from services.sector_service import SectorService
+from utils.time_utils import get_data_date
+
+class SectorHistoryService:
+    """板块历史数据服务"""
+    
+    @staticmethod
+    def save_today_sectors(db: Session) -> int:
+        """
+        保存板块数据（自动判断日期）
+        - 如果在交易时间内，使用当前日期
+        - 如果不在交易时间内，使用上一个交易日
+        
+        使用事务和锁机制防止重复数据：
+        1. 先获取数据（避免在删除后获取数据时出现问题）
+        2. 在事务中删除旧数据
+        3. 在事务中保存新数据
+        """
+        data_date = get_data_date()
+        
+        try:
+            # 先获取当前板块数据（在删除之前获取，避免数据丢失）
+            sectors = SectorService.get_industry_summary()
+            
+            if not sectors:
+                print(f"⚠️  警告: {data_date} 没有获取到板块数据")
+                return 0
+            
+            # 在事务中删除旧数据并保存新数据
+            # 检查该日期的数据是否已存在
+            existing_count = db.query(SectorHistory).filter(SectorHistory.date == data_date).count()
+            if existing_count > 0:
+                # 如果已存在，先删除旧数据
+                deleted_count = db.query(SectorHistory).filter(SectorHistory.date == data_date).delete()
+                print(f"🗑️  删除 {data_date} 的旧数据: {deleted_count} 条")
+                # 立即提交删除操作，确保数据一致性
+                db.commit()
+            
+            # 保存新数据
+            saved_count = 0
+            for sector in sectors:
+                history = SectorHistory(
+                    date=data_date,
+                    index=sector['index'],
+                    name=sector['name'],
+                    change_percent=sector['changePercent'],
+                    total_volume=sector['totalVolume'],
+                    total_amount=sector['totalAmount'],
+                    net_inflow=sector['netInflow'],
+                    up_count=sector['upCount'],
+                    down_count=sector['downCount'],
+                    avg_price=sector['avgPrice'],
+                    leading_stock=sector['leadingStock'],
+                    leading_stock_price=sector['leadingStockPrice'],
+                    leading_stock_change_percent=sector['leadingStockChangePercent'],
+                )
+                db.add(history)
+                saved_count += 1
+            
+            # 提交新数据
+            db.commit()
+            print(f"✅ 成功保存 {saved_count} 条板块数据到数据库 ({data_date})")
+            return saved_count
+            
+        except Exception as e:
+            db.rollback()
+            print(f"❌ 保存板块数据失败: {str(e)}")
+            raise
+    
+    @staticmethod
+    def get_sectors_by_date(db: Session, target_date: date) -> List[Dict]:
+        """根据日期获取板块数据"""
+        sectors = db.query(SectorHistory).filter(
+            SectorHistory.date == target_date
+        ).order_by(SectorHistory.index).all()
+        
+        return [sector.to_dict() for sector in sectors]
+    
+    @staticmethod
+    def get_sectors_by_date_range(db: Session, start_date: date, end_date: date) -> List[Dict]:
+        """
+        根据日期范围获取板块数据
+        时间范围：开始日期从00:00:00开始，结束日期到23:59:59
+        
+        注意：由于date字段是Date类型，查询已包含完整的一天
+        如果将来需要基于created_at进行精确时间查询，可以使用datetime范围
+        
+        Args:
+            start_date: 开始日期（包含，从00:00:00开始）
+            end_date: 结束日期（包含，到23:59:59结束）
+        """
+        # 查询date字段在范围内的数据
+        # date >= start_date 包含start_date的00:00:00开始的所有数据
+        # date <= end_date 包含end_date的23:59:59结束的所有数据
+        sectors = db.query(SectorHistory).filter(
+            and_(
+                SectorHistory.date >= start_date,
+                SectorHistory.date <= end_date
+            )
+        ).order_by(SectorHistory.date.desc(), SectorHistory.index).all()
+        
+        return [sector.to_dict() for sector in sectors]
+    
+    @staticmethod
+    def get_all_dates(db: Session) -> List[date]:
+        """获取所有有数据的日期"""
+        dates = db.query(SectorHistory.date).distinct().order_by(SectorHistory.date.desc()).all()
+        return [d[0] for d in dates]
+

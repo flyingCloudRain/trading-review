@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/trading_review.db}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+      - FLASK_DEBUG=${FLASK_DEBUG:-False}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - trading-review-network
+
+networks:
+  trading-review-network:
+    driver: bridge
+
