@@ -4,7 +4,7 @@
 板块数据定时任务调度器
 """
 import logging
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import sys
@@ -43,7 +43,7 @@ class SectorScheduler:
     
     def _setup_jobs(self):
         """设置定时任务"""
-        # 每日15:10执行（北京时间）- 保存所有数据
+        # 每日15:10执行（北京时间）- 保存所有数据（收盘后最终数据）
         self.scheduler.add_job(
             func=self.save_daily_data,
             trigger=CronTrigger(hour=15, minute=10, timezone=UTC8),
@@ -52,7 +52,18 @@ class SectorScheduler:
             replace_existing=True
         )
         
-        logger.info("定时任务已设置：每日15:10（北京时间）执行数据保存（板块、涨停、炸板、跌停、指数）")
+        # 每日15:10执行获取即时资金流数据（概念板块）
+        self.scheduler.add_job(
+            func=self.save_realtime_fund_flow,
+            trigger=CronTrigger(hour=15, minute=10, timezone=UTC8),
+            id='save_realtime_fund_flow_1510',
+            name='每日15:10获取即时资金流数据',
+            replace_existing=True
+        )
+        
+        logger.info("定时任务已设置：")
+        logger.info("  - 每日15:10（北京时间）执行数据保存（板块、涨停、炸板、跌停、指数）")
+        logger.info("  - 每日15:10（北京时间）获取即时资金流数据（概念板块）")
     
     def _is_trading_day(self, target_date: date) -> bool:
         """检查是否为交易日"""
@@ -93,16 +104,23 @@ class SectorScheduler:
             # 获取数据库会话
             db = SessionLocal()
             try:
-                # 1. 保存板块数据
+                # 1. 保存行业板块数据
                 try:
-                    saved_count = SectorHistoryService.save_today_sectors(db)
-                    logger.info(f"✅ 成功保存 {saved_count} 条板块数据到数据库")
+                    saved_count = SectorHistoryService.save_today_sectors(db, sector_type='industry')
+                    logger.info(f"✅ 成功保存 {saved_count} 条行业板块数据到数据库")
                     
                     # 追加到Excel文件
                     excel_file = append_sectors_to_excel()
-                    logger.info(f"✅ 成功追加板块数据到Excel文件: {excel_file}")
+                    logger.info(f"✅ 成功追加行业板块数据到Excel文件: {excel_file}")
                 except Exception as e:
-                    logger.error(f"❌ 保存板块数据失败: {str(e)}", exc_info=True)
+                    logger.error(f"❌ 保存行业板块数据失败: {str(e)}", exc_info=True)
+                
+                # 1.1 保存概念板块数据
+                try:
+                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
+                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块数据到数据库")
+                except Exception as e:
+                    logger.error(f"❌ 保存概念板块数据失败: {str(e)}", exc_info=True)
                 
                 # 2. 保存涨停股票池数据
                 try:
@@ -141,6 +159,37 @@ class SectorScheduler:
                 
         except Exception as e:
             logger.error(f"定时任务执行失败: {str(e)}", exc_info=True)
+    
+    def save_realtime_fund_flow(self):
+        """保存即时资金流数据（概念板块）- 每日15:10执行"""
+        try:
+            logger.info("开始执行即时资金流数据保存任务...")
+            
+            # 检查是否为交易日
+            today = get_utc8_date()
+            if not self._is_trading_day(today):
+                logger.info(f"今日 ({today}) 不是交易日，跳过即时资金流数据保存")
+                return
+            
+            # 获取数据库会话
+            db = SessionLocal()
+            try:
+                # 保存概念板块即时资金流数据
+                try:
+                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
+                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块即时资金流数据到数据库 (15:10)")
+                except Exception as e:
+                    logger.error(f"❌ 保存概念板块即时资金流数据失败: {str(e)}", exc_info=True)
+                
+                logger.info("即时资金流数据保存任务完成")
+                
+            except Exception as e:
+                logger.error(f"数据库操作失败: {str(e)}", exc_info=True)
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"即时资金流定时任务执行失败: {str(e)}", exc_info=True)
     
     def start(self):
         """启动调度器"""

@@ -71,7 +71,48 @@ st.markdown("""
         font-size: 2rem;
         font-weight: bold;
     }
+    /* 优化指数涨跌幅颜色 - 加深颜色，提升视觉效果 */
+    div[data-testid="stMetricDelta"] {
+        font-weight: 700 !important;
+        font-size: 1.1em !important;
+    }
+    /* 上涨颜色 - 深红色 (#dc2626) - 使用属性选择器 */
+    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"],
+    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Up"]) {
+        color: #dc2626 !important;
+        fill: #dc2626 !important;
+    }
+    /* 下跌颜色 - 深绿色 (#059669) */
+    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"],
+    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Down"]) {
+        color: #059669 !important;
+        fill: #059669 !important;
+    }
     </style>
+    <script>
+    // 动态设置涨跌幅颜色，确保颜色加深
+    setTimeout(function() {
+        document.querySelectorAll('div[data-testid="stMetricDelta"]').forEach(function(el) {
+            var text = el.textContent || el.innerText;
+            var svg = el.querySelector('svg');
+            if (text && text.includes('+')) {
+                el.style.color = '#dc2626';
+                el.style.fontWeight = '700';
+                if (svg) {
+                    svg.style.color = '#dc2626';
+                    svg.style.fill = '#dc2626';
+                }
+            } else if (text && text.includes('-')) {
+                el.style.color = '#059669';
+                el.style.fontWeight = '700';
+                if (svg) {
+                    svg.style.color = '#059669';
+                    svg.style.fill = '#059669';
+                }
+            }
+        });
+    }, 200);
+    </script>
 """, unsafe_allow_html=True)
 
 # 页面标题
@@ -101,8 +142,11 @@ def load_daily_data(target_date: date):
     """加载指定日期的所有数据"""
     db = SessionLocal()
     try:
-        # 板块数据
-        sectors = SectorHistoryService.get_sectors_by_date(db, target_date)
+        # 行业板块数据
+        industry_sectors = SectorHistoryService.get_sectors_by_date(db, target_date, 'industry')
+        
+        # 概念板块数据
+        concept_sectors = SectorHistoryService.get_sectors_by_date(db, target_date, 'concept')
         
         # 涨停股票池
         zt_pool = ZtPoolHistoryService.get_zt_pool_by_date(db, target_date)
@@ -117,7 +161,8 @@ def load_daily_data(target_date: date):
         indices = IndexHistoryService.get_indices_by_date(db, target_date)
         
         return {
-            'sectors': sectors,
+            'industry_sectors': industry_sectors,
+            'concept_sectors': concept_sectors,
             'zt_pool': zt_pool,
             'dt_pool': dt_pool,
             'zb_pool': zb_pool,
@@ -130,19 +175,24 @@ def load_daily_data(target_date: date):
 try:
     data = load_daily_data(data_date)
     
-    sectors = data['sectors']
+    industry_sectors = data['industry_sectors']
+    concept_sectors = data['concept_sectors']
     zt_pool = data['zt_pool']
     dt_pool = data['dt_pool']
     zb_pool = data['zb_pool']
     indices = data['indices']
     
+    # 合并所有板块数据（用于兼容旧代码）
+    sectors = (industry_sectors or []) + (concept_sectors or [])
+    
     # 检查数据是否为空（显示详细诊断信息）
-    if not sectors and not zt_pool and not dt_pool and not zb_pool and not indices:
+    if not industry_sectors and not concept_sectors and not zt_pool and not dt_pool and not zb_pool and not indices:
         # 显示诊断信息
         st.warning("⚠️ 数据诊断信息：")
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"- 板块数据: {len(sectors) if sectors else 0} 条")
+            st.write(f"- 行业板块数据: {len(industry_sectors) if industry_sectors else 0} 条")
+            st.write(f"- 概念板块数据: {len(concept_sectors) if concept_sectors else 0} 条")
             st.write(f"- 涨停股票池: {len(zt_pool) if zt_pool else 0} 条")
             st.write(f"- 跌停股票池: {len(dt_pool) if dt_pool else 0} 条")
         with col2:
@@ -360,18 +410,30 @@ try:
             # 导入失败，忽略
             pass
     
-    # 计算板块统计
-    sector_up = len([s for s in sectors if s.get('changePercent', 0) > 0]) if sectors else 0
-    sector_down = len([s for s in sectors if s.get('changePercent', 0) < 0]) if sectors else 0
-    sector_net_inflow = sum([s.get('netInflow', 0) for s in sectors if s.get('netInflow', 0) > 0]) if sectors else 0
-    sector_net_outflow = abs(sum([s.get('netInflow', 0) for s in sectors if s.get('netInflow', 0) < 0])) if sectors else 0
+    # 计算行业板块统计
+    industry_up = len([s for s in industry_sectors if s.get('changePercent', 0) > 0]) if industry_sectors else 0
+    industry_down = len([s for s in industry_sectors if s.get('changePercent', 0) < 0]) if industry_sectors else 0
+    industry_net_inflow = sum([s.get('netInflow', 0) for s in industry_sectors if s.get('netInflow', 0) > 0]) if industry_sectors else 0
+    industry_net_outflow = abs(sum([s.get('netInflow', 0) for s in industry_sectors if s.get('netInflow', 0) < 0])) if industry_sectors else 0
+    
+    # 计算概念板块统计
+    concept_up = len([s for s in concept_sectors if s.get('changePercent', 0) > 0]) if concept_sectors else 0
+    concept_down = len([s for s in concept_sectors if s.get('changePercent', 0) < 0]) if concept_sectors else 0
+    concept_net_inflow = sum([s.get('netInflow', 0) for s in concept_sectors if s.get('netInflow', 0) > 0]) if concept_sectors else 0
+    concept_net_outflow = abs(sum([s.get('netInflow', 0) for s in concept_sectors if s.get('netInflow', 0) < 0])) if concept_sectors else 0
+    
+    # 合并统计（用于兼容旧代码）
+    sector_up = industry_up + concept_up
+    sector_down = industry_down + concept_down
+    sector_net_inflow = industry_net_inflow + concept_net_inflow
+    sector_net_outflow = industry_net_outflow + concept_net_outflow
     
     # 股票池统计
     zt_count = len(zt_pool) if zt_pool else 0
     zb_count = len(zb_pool) if zb_pool else 0
     dt_count = len(dt_pool) if dt_pool else 0
     
-    # 显示市场概况卡片
+    # 显示市场概况卡片（4列布局）
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -416,26 +478,26 @@ try:
             st.info("创业板指: 暂无数据")
     
     with col2:
-        st.markdown("#### 🏢 板块统计")
+        st.markdown("#### 🏢 行业板块统计")
         st.metric(
             "📈 上涨板块",
-            f"{sector_up}",
-            help="上涨板块数量"
+            f"{industry_up}",
+            help="上涨行业板块数量"
         )
         st.metric(
             "📉 下跌板块",
-            f"{sector_down}",
-            help="下跌板块数量"
+            f"{industry_down}",
+            help="下跌行业板块数量"
         )
         st.metric(
             "💰 资金净流入",
-            f"{sector_net_inflow:.2f}亿元",
-            help="板块资金净流入总额"
+            f"{industry_net_inflow:.2f}亿元",
+            help="行业板块资金净流入总额"
         )
         st.metric(
             "💸 资金净流出",
-            f"{sector_net_outflow:.2f}亿元",
-            help="板块资金净流出总额"
+            f"{industry_net_outflow:.2f}亿元",
+            help="行业板块资金净流出总额"
         )
     
     with col3:
@@ -459,9 +521,14 @@ try:
     with col4:
         st.markdown("#### 📋 数据概览")
         st.metric(
-            "📊 板块总数",
-            f"{len(sectors)}",
-            help="板块数据总数"
+            "🏢 行业板块",
+            f"{len(industry_sectors) if industry_sectors else 0}",
+            help="行业板块数量"
+        )
+        st.metric(
+            "💡 概念板块",
+            f"{len(concept_sectors) if concept_sectors else 0}",
+            help="概念板块数量"
         )
         st.metric(
             "⭐ 重点指数",
@@ -537,14 +604,35 @@ try:
         df_display = df_focused_indices[['name', 'code', 'currentPrice', 'changePercent', 'change']].copy()
         df_display.columns = ['指数名称', '指数代码', '最新价', '涨跌幅(%)', '涨跌额']
         
+        # 保存原始涨跌幅用于样式判断
+        change_percent_values = df_focused_indices['changePercent'].values
+        
         # 格式化数值
         df_display['最新价'] = df_display['最新价'].apply(lambda x: f"{x:.2f}")
         df_display['涨跌幅(%)'] = df_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%")
         df_display['涨跌额'] = df_display['涨跌额'].apply(lambda x: f"{x:+.2f}")
         
-        # 显示表格（无背景色）
+        # 定义样式函数：上涨用深红色背景，下跌用深绿色背景
+        def apply_cell_style(df):
+            """对涨跌幅列应用背景色：上涨深红色，下跌深绿色，加深颜色优化视觉效果"""
+            styles = pd.DataFrame('', index=df.index, columns=df.columns)
+            # 只对涨跌幅列应用样式
+            for idx in df.index:
+                change_pct = change_percent_values[idx]
+                if change_pct > 0:
+                    # 上涨：深红色背景 (#dc2626)，白色文字，加粗
+                    styles.loc[idx, '涨跌幅(%)'] = 'background-color: #dc2626; color: #ffffff; font-weight: 700;'
+                elif change_pct < 0:
+                    # 下跌：深绿色背景 (#059669)，白色文字，加粗
+                    styles.loc[idx, '涨跌幅(%)'] = 'background-color: #059669; color: #ffffff; font-weight: 700;'
+            return styles
+        
+        # 使用pandas Styler应用样式
+        styled_df = df_display.style.apply(apply_cell_style, axis=None)
+        
+        # 显示样式化的表格
         st.dataframe(
-            df_display,
+            styled_df,
             use_container_width=True,
             hide_index=True
         )
@@ -557,52 +645,58 @@ try:
     
     
     # ========== 板块数据统计 ==========
-    if sectors:
-        st.markdown('<h2 class="section-header">🏢 板块数据统计</h2>', unsafe_allow_html=True)
+    # 行业板块数据统计
+    if industry_sectors:
+        st.markdown('<h2 class="section-header">🏢 行业板块数据统计</h2>', unsafe_allow_html=True)
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
+            # 计算上涨板块占比
+            industry_total = len(industry_sectors) if industry_sectors else 0
+            industry_up_ratio = (industry_up / industry_total * 100) if industry_total > 0 else 0
             st.metric(
                 "📈 上涨板块",
-                f"{sector_up}",
-                delta=f"{sector_up - sector_down}" if sector_up > sector_down else None,
-                help="所选日期的上涨板块数量"
+                f"{industry_up}",
+                delta=f"{industry_up_ratio:.1f}%" if industry_total > 0 else None,
+                help="所选日期的上涨行业板块数量及占比"
             )
         
         with col2:
+            # 计算下跌板块占比
+            industry_down_ratio = (industry_down / industry_total * 100) if industry_total > 0 else 0
             st.metric(
                 "📉 下跌板块",
-                f"{sector_down}",
-                delta=f"{sector_down - sector_up}" if sector_down > sector_up else None,
+                f"{industry_down}",
+                delta=f"{industry_down_ratio:.1f}%" if industry_total > 0 else None,
                 delta_color="inverse",
-                help="所选日期的下跌板块数量"
+                help="所选日期的下跌行业板块数量及占比"
             )
         
         with col3:
             st.metric(
                 "💰 资金净流入",
-                f"{sector_net_inflow:.2f}亿元",
-                help="所选日期的板块资金净流入总额"
+                f"{industry_net_inflow:.2f}亿元",
+                help="所选日期的行业板块资金净流入总额"
             )
         
         with col4:
             st.metric(
                 "💸 资金净流出",
-                f"{sector_net_outflow:.2f}亿元",
+                f"{industry_net_outflow:.2f}亿元",
                 delta_color="inverse",
-                help="所选日期的板块资金净流出总额"
+                help="所选日期的行业板块资金净流出总额"
             )
         
-        # 板块涨跌幅TOP 10
-        if len(sectors) > 0:
-            df_sectors = pd.DataFrame(sectors)
+        # 行业板块涨跌幅TOP 10
+        if len(industry_sectors) > 0:
+            df_industry = pd.DataFrame(industry_sectors)
             
             col1, col2 = st.columns(2)
             
             with col1:
                 # 涨幅TOP 10
-                top_up = df_sectors.nlargest(10, 'changePercent')[['name', 'changePercent']]
+                top_up = df_industry.nlargest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_up.empty:
                     fig_up = px.bar(
                         top_up,
@@ -611,7 +705,7 @@ try:
                         orientation='h',
                         color='changePercent',
                         color_continuous_scale='Reds',
-                        title='📈 涨幅TOP 10',
+                        title='📈 行业板块涨幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '板块名称'}
                     )
                     fig_up.update_layout(
@@ -625,7 +719,7 @@ try:
             
             with col2:
                 # 跌幅TOP 10
-                top_down = df_sectors.nsmallest(10, 'changePercent')[['name', 'changePercent']]
+                top_down = df_industry.nsmallest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_down.empty:
                     # 取绝对值用于排序，但显示原值
                     top_down_sorted = top_down.copy()
@@ -639,7 +733,7 @@ try:
                         orientation='h',
                         color='changePercent',
                         color_continuous_scale='Greens',
-                        title='📉 跌幅TOP 10',
+                        title='📉 行业板块跌幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '板块名称'}
                     )
                     fig_down.update_layout(
@@ -650,14 +744,14 @@ try:
                         showlegend=False
                     )
                     st.plotly_chart(fig_down, use_container_width=True)
-            
+    
             # 资金净流入/流出TOP 10
             col3, col4 = st.columns(2)
             
             with col3:
                 # 资金净流入TOP 10
-                if 'netInflow' in df_sectors.columns:
-                    top_inflow = df_sectors.nlargest(10, 'netInflow')[['name', 'netInflow']]
+                if 'netInflow' in df_industry.columns:
+                    top_inflow = df_industry.nlargest(10, 'netInflow')[['name', 'netInflow']]
                     if not top_inflow.empty:
                         fig_inflow = px.bar(
                             top_inflow,
@@ -666,8 +760,155 @@ try:
                             orientation='h',
                             color='netInflow',
                             color_continuous_scale='Oranges',
-                            title='💰 资金净流入TOP 10',
+                            title='💰 行业板块资金净流入TOP 10',
                             labels={'netInflow': '净流入(亿元)', 'name': '板块名称'}
+                        )
+                        fig_inflow.update_layout(
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_inflow, use_container_width=True)
+            
+            with col4:
+                # 资金净流出TOP 10（取绝对值最大的）
+                if 'netInflow' in df_industry.columns:
+                    # 筛选净流出的板块（netInflow < 0）
+                    outflow_sectors = df_industry[df_industry['netInflow'] < 0].copy()
+                    if not outflow_sectors.empty:
+                        outflow_sectors['abs_netInflow'] = outflow_sectors['netInflow'].abs()
+                        top_outflow = outflow_sectors.nlargest(10, 'abs_netInflow')[['name', 'netInflow']]
+                        if not top_outflow.empty:
+                            fig_outflow = px.bar(
+                                top_outflow,
+                                x='netInflow',
+                                y='name',
+                                orientation='h',
+                                color='netInflow',
+                                color_continuous_scale='Blues',
+                                title='💸 行业板块资金净流出TOP 10',
+                                labels={'netInflow': '净流出(亿元)', 'name': '板块名称'}
+                            )
+                            fig_outflow.update_layout(
+                                yaxis={'categoryorder': 'total ascending'},
+                                height=400,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                                showlegend=False
+                            )
+                            st.plotly_chart(fig_outflow, use_container_width=True)
+    
+    # 概念板块数据统计
+    if concept_sectors:
+        st.markdown('<h2 class="section-header">💡 概念板块数据统计</h2>', unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # 计算上涨概念占比
+            concept_total = len(concept_sectors) if concept_sectors else 0
+            concept_up_ratio = (concept_up / concept_total * 100) if concept_total > 0 else 0
+            st.metric(
+                "📈 上涨概念",
+                f"{concept_up}",
+                delta=f"{concept_up_ratio:.1f}%" if concept_total > 0 else None,
+                help="所选日期的上涨概念板块数量及占比"
+            )
+        
+        with col2:
+            # 计算下跌概念占比
+            concept_down_ratio = (concept_down / concept_total * 100) if concept_total > 0 else 0
+            st.metric(
+                "📉 下跌概念",
+                f"{concept_down}",
+                delta=f"{concept_down_ratio:.1f}%" if concept_total > 0 else None,
+                delta_color="inverse",
+                help="所选日期的下跌概念板块数量及占比"
+            )
+        
+        with col3:
+            st.metric(
+                "💰 资金净流入",
+                f"{concept_net_inflow:.2f}亿元",
+                help="所选日期的概念板块资金净流入总额"
+            )
+        
+        # 概念板块涨跌幅TOP 10
+        if len(concept_sectors) > 0:
+            df_concept = pd.DataFrame(concept_sectors)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 涨幅TOP 10
+                top_up = df_concept.nlargest(10, 'changePercent')[['name', 'changePercent']]
+                if not top_up.empty:
+                    fig_up = px.bar(
+                        top_up,
+                        x='changePercent',
+                        y='name',
+                        orientation='h',
+                        color='changePercent',
+                        color_continuous_scale='Reds',
+                        title='📈 概念板块涨幅TOP 10',
+                        labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
+                    )
+                    fig_up.update_layout(
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=400,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_up, use_container_width=True)
+            
+            with col2:
+                # 跌幅TOP 10
+                top_down = df_concept.nsmallest(10, 'changePercent')[['name', 'changePercent']]
+                if not top_down.empty:
+                    # 取绝对值用于排序，但显示原值
+                    top_down_sorted = top_down.copy()
+                    top_down_sorted['_abs_sort'] = top_down_sorted['changePercent'].abs()
+                    top_down_sorted = top_down_sorted.nlargest(10, '_abs_sort')
+                    
+                    fig_down = px.bar(
+                        top_down_sorted,
+                        x='changePercent',
+                        y='name',
+                        orientation='h',
+                        color='changePercent',
+                        color_continuous_scale='Greens',
+                        title='📉 概念板块跌幅TOP 10',
+                        labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
+                    )
+                    fig_down.update_layout(
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=400,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_down, use_container_width=True)
+            
+            # 资金净流入TOP 10
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                # 资金净流入TOP 10
+                if 'netInflow' in df_concept.columns:
+                    top_inflow = df_concept.nlargest(10, 'netInflow')[['name', 'netInflow']]
+                    if not top_inflow.empty:
+                        fig_inflow = px.bar(
+                            top_inflow,
+                            x='netInflow',
+                            y='name',
+                            orientation='h',
+                            color='netInflow',
+                            color_continuous_scale='Oranges',
+                            title='💰 概念板块资金净流入TOP 10',
+                            labels={'netInflow': '净流入(亿元)', 'name': '概念名称'}
                         )
                         fig_inflow.update_layout(
                             yaxis={'categoryorder': 'total ascending'},
@@ -680,12 +921,12 @@ try:
             
             with col4:
                 # 资金净流出TOP 10（取绝对值最大的）
-                if 'netInflow' in df_sectors.columns:
+                if 'netInflow' in df_concept.columns:
                     # 筛选净流出的板块（netInflow < 0）
-                    outflow_sectors = df_sectors[df_sectors['netInflow'] < 0].copy()
-                    if not outflow_sectors.empty:
-                        outflow_sectors['abs_netInflow'] = outflow_sectors['netInflow'].abs()
-                        top_outflow = outflow_sectors.nlargest(10, 'abs_netInflow')[['name', 'netInflow']]
+                    outflow_concepts = df_concept[df_concept['netInflow'] < 0].copy()
+                    if not outflow_concepts.empty:
+                        outflow_concepts['abs_netInflow'] = outflow_concepts['netInflow'].abs()
+                        top_outflow = outflow_concepts.nlargest(10, 'abs_netInflow')[['name', 'netInflow']]
                         if not top_outflow.empty:
                             fig_outflow = px.bar(
                                 top_outflow,
@@ -694,8 +935,8 @@ try:
                                 orientation='h',
                                 color='netInflow',
                                 color_continuous_scale='Blues',
-                                title='💸 资金净流出TOP 10',
-                                labels={'netInflow': '净流出(亿元)', 'name': '板块名称'}
+                                title='💸 概念板块资金净流出TOP 10',
+                                labels={'netInflow': '净流出(亿元)', 'name': '概念名称'}
                             )
                             fig_outflow.update_layout(
                                 yaxis={'categoryorder': 'total ascending'},
@@ -708,10 +949,8 @@ try:
     
     # ========== 股票池统计 ==========
     st.markdown('<h2 class="section-header">📊 股票池统计</h2>', unsafe_allow_html=True)
-        # 显示KPI卡片（统计数据已在市场概况部分计算）
+    # 显示KPI卡片（统计数据已在市场概况部分计算）
     col1, col2, col3, col4 = st.columns(4)
-    
-
     
     with col1:
         st.metric(

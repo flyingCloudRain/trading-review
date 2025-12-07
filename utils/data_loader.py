@@ -16,7 +16,8 @@ from datetime import date
 def load_sector_data(
     start_date: date,
     end_date: date,
-    sector_names: list = None
+    sector_names: list = None,
+    sector_type: str = None
 ) -> pd.DataFrame:
     """
     加载板块数据（带缓存）
@@ -25,6 +26,7 @@ def load_sector_data(
         start_date: 开始日期
         end_date: 结束日期
         sector_names: 板块名称列表（可选）
+        sector_type: 板块类型，'industry'（行业板块）或 'concept'（概念板块），None表示获取所有类型
     
     Returns:
         包含板块数据的DataFrame
@@ -32,9 +34,9 @@ def load_sector_data(
     db = SessionLocal()
     try:
         if start_date == end_date:
-            sectors = SectorHistoryService.get_sectors_by_date(db, start_date)
+            sectors = SectorHistoryService.get_sectors_by_date(db, start_date, sector_type)
         else:
-            sectors = SectorHistoryService.get_sectors_by_date_range(db, start_date, end_date)
+            sectors = SectorHistoryService.get_sectors_by_date_range(db, start_date, end_date, sector_type)
         
         df = pd.DataFrame(sectors)
         
@@ -52,11 +54,17 @@ def load_sector_data(
         db.close()
 
 @st.cache_data(ttl=300)
-def load_sector_data_by_date(target_date: date) -> pd.DataFrame:
-    """加载指定日期的板块数据"""
+def load_sector_data_by_date(target_date: date, sector_type: str = None) -> pd.DataFrame:
+    """
+    加载指定日期的板块数据
+    
+    Args:
+        target_date: 目标日期
+        sector_type: 板块类型，'industry'（行业板块）或 'concept'（概念板块），None表示获取所有类型
+    """
     db = SessionLocal()
     try:
-        sectors = SectorHistoryService.get_sectors_by_date(db, target_date)
+        sectors = SectorHistoryService.get_sectors_by_date(db, target_date, sector_type)
         return pd.DataFrame(sectors)
     except Exception as e:
         error_msg = f"加载板块数据失败: {str(e)}"

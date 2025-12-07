@@ -89,7 +89,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="main-header">📊 板块信息</h1>', unsafe_allow_html=True)
+# 板块类型选择
+sector_type = st.radio(
+    "选择板块类型",
+    options=['industry', 'concept'],
+    format_func=lambda x: '🏭 行业板块' if x == 'industry' else '💡 概念板块',
+    horizontal=True,
+    help="选择要查看的板块类型：行业板块或概念板块"
+)
+
+# 根据选择的板块类型显示标题
+sector_type_title = '行业板块' if sector_type == 'industry' else '概念板块'
+st.markdown(f'<h1 class="main-header">📊 {sector_type_title}信息</h1>', unsafe_allow_html=True)
 
 # 日期选择器（单选）
 default_date = get_data_date()  # 使用get_data_date()，如果未到下一交易日开盘时间，使用前一交易日
@@ -107,8 +118,8 @@ selected_date = st.date_input(
 if selected_date is None:
     selected_date = get_data_date()
 
-# 加载选择日期的单日数据用于统计和排名
-df_selected_date = load_sector_data_by_date(selected_date)
+# 加载选择日期的单日数据用于统计和排名（按板块类型过滤）
+df_selected_date = load_sector_data_by_date(selected_date, sector_type)
 
 if df_selected_date.empty:
     st.warning(f"⚠️  {selected_date} 暂无数据，请选择其他日期")
@@ -144,7 +155,8 @@ else:
     outflow_amount = 0
 
 # 显示统计卡片 - 优化布局和样式（4列）
-st.markdown('<h2 class="section-header"> 板块统计</h2>', unsafe_allow_html=True)
+sector_type_label = '行业板块' if sector_type == 'industry' else '概念板块'
+st.markdown(f'<h2 class="section-header">📊 {sector_type_label}统计</h2>', unsafe_allow_html=True)
 col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
 
 with col_stat1:

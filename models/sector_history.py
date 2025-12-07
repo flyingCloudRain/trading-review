@@ -3,11 +3,12 @@ from sqlalchemy.sql import func
 from database.db import Base
 
 class SectorHistory(Base):
-    """板块历史数据模型"""
+    """板块历史数据模型（支持行业板块和概念板块）"""
     __tablename__ = 'sector_history'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     date = Column(Date, nullable=False, index=True, comment='日期')
+    sector_type = Column(String(20), nullable=False, default='industry', index=True, comment='板块类型: industry(行业板块) 或 concept(概念板块)')
     index = Column(Integer, nullable=False, comment='序号')
     name = Column(String(50), nullable=False, index=True, comment='板块名称')
     change_percent = Column(Float, nullable=False, comment='涨跌幅(%)')
@@ -27,6 +28,7 @@ class SectorHistory(Base):
         return {
             'id': self.id,
             'date': self.date.strftime('%Y-%m-%d') if self.date else None,
+            'sectorType': self.sector_type,
             'index': self.index,
             'name': self.name,
             'changePercent': self.change_percent,

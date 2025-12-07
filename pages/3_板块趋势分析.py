@@ -49,7 +49,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="main-header">📈 板块趋势分析</h1>', unsafe_allow_html=True)
+# 板块类型选择
+sector_type = st.radio(
+    "选择板块类型",
+    options=['industry', 'concept'],
+    format_func=lambda x: '🏭 行业板块' if x == 'industry' else '💡 概念板块',
+    horizontal=True,
+    help="选择要查看的板块类型：行业板块或概念板块"
+)
+
+# 根据选择的板块类型显示标题
+sector_type_title = '行业板块' if sector_type == 'industry' else '概念板块'
+st.markdown(f'<h1 class="main-header">📈 {sector_type_title}趋势分析</h1>', unsafe_allow_html=True)
 
 # 日期范围选择
 today = get_utc8_date()
@@ -67,8 +78,8 @@ else:
     # 如果只选择了一个日期，使用该日期作为开始和结束
     start_date = end_date = date_range if isinstance(date_range, date) else today
 
-# 加载数据
-df = load_sector_data(start_date, end_date)
+# 加载数据（按板块类型过滤）
+df = load_sector_data(start_date, end_date, sector_type=sector_type)
 
 if df.empty:
     st.warning("暂无数据，请选择其他日期范围")
