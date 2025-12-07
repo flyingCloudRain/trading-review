@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from database.db import SessionLocal
+from database.db import SessionLocal, init_db
 from services.sector_history_service import SectorHistoryService
 from utils.time_utils import get_utc8_date_str
 
@@ -26,6 +26,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# 初始化数据库（仅在首次运行时执行）
+if 'db_initialized' not in st.session_state:
+    try:
+        init_db()
+        st.session_state.db_initialized = True
+    except Exception as e:
+        # 如果初始化失败，记录错误但不阻止应用运行
+        st.error(f"⚠️ 数据库初始化失败: {str(e)}")
+        st.session_state.db_initialized = False
 
 # 标题
 st.title("📈 A股交易复盘系统 - 数据可视化")
