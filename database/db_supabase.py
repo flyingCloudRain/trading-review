@@ -20,23 +20,37 @@ try:
     )
     print("✅ 已连接到 Supabase PostgreSQL 数据库")
 except ValueError as e:
-    error_msg = f"""
-❌ Supabase配置未完成: {e}
+    # 配置错误：提供详细的配置说明
+    config_help = """
+请在 Streamlit Cloud Secrets 中配置以下环境变量：
 
-请配置以下环境变量：
+必需配置：
 - SUPABASE_PROJECT_REF: Supabase项目引用ID
 - SUPABASE_DB_PASSWORD: Supabase数据库密码
 
-或者在 Streamlit Cloud Secrets 中配置：
-- SUPABASE_PROJECT_REF
-- SUPABASE_DB_PASSWORD
-- SUPABASE_URL (可选)
-- SUPABASE_ANON_KEY (可选)
+可选配置：
+- SUPABASE_URL: Supabase项目URL
+- SUPABASE_ANON_KEY: Supabase匿名密钥
+
+配置步骤：
+1. 进入 Streamlit Cloud 应用设置
+2. 点击 "Secrets" 标签
+3. 添加上述环境变量（使用 TOML 格式）
+4. 保存并重新部署应用
+
+示例 Secrets 配置：
+```toml
+SUPABASE_PROJECT_REF = "your-project-ref"
+SUPABASE_DB_PASSWORD = "your-db-password"
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_ANON_KEY = "your-anon-key"
+```
 
 详细配置说明请查看: SUPABASE_SETUP.md
 """
-    print(error_msg)
-    raise RuntimeError("Supabase配置不完整，无法连接数据库。请配置必要的环境变量。") from e
+    error_msg = f"Supabase配置不完整: {e}\n\n{config_help}"
+    print(f"❌ {error_msg}")
+    raise ValueError(error_msg)
 except Exception as e:
     error_msg = f"""
 ❌ 连接 Supabase 数据库失败: {str(e)}

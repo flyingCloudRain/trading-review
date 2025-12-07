@@ -15,9 +15,18 @@ from datetime import datetime, timedelta
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from database.db import SessionLocal, init_db
-from services.sector_history_service import SectorHistoryService
-from utils.time_utils import get_utc8_date_str
+# 尝试导入数据库模块，如果失败则显示配置提示
+try:
+    from database.db import SessionLocal, init_db
+    from services.sector_history_service import SectorHistoryService
+    from utils.time_utils import get_utc8_date_str
+    DB_AVAILABLE = True
+except (ValueError, RuntimeError) as e:
+    DB_AVAILABLE = False
+    DB_ERROR = str(e)
+except Exception as e:
+    DB_AVAILABLE = False
+    DB_ERROR = f"数据库连接错误: {str(e)}"
 
 # 页面配置
 st.set_page_config(
@@ -26,6 +35,41 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+# 检查数据库配置
+if not DB_AVAILABLE:
+    st.error("❌ 数据库配置未完成")
+    st.markdown("""
+    ### 📋 请在 Streamlit Cloud Secrets 中配置以下环境变量：
+    
+    **必需配置：**
+    - `SUPABASE_PROJECT_REF`: Supabase项目引用ID
+    - `SUPABASE_DB_PASSWORD`: Supabase数据库密码
+    
+    **可选配置：**
+    - `SUPABASE_URL`: Supabase项目URL
+    - `SUPABASE_ANON_KEY`: Supabase匿名密钥
+    
+    ### 🔧 配置步骤：
+    1. 进入 Streamlit Cloud 应用设置
+    2. 点击 **"Secrets"** 标签
+    3. 添加上述环境变量（使用 TOML 格式）
+    4. 保存并重新部署应用
+    
+    ### 📝 示例 Secrets 配置：
+    ```toml
+    SUPABASE_PROJECT_REF = "your-project-ref"
+    SUPABASE_DB_PASSWORD = "your-db-password"
+    SUPABASE_URL = "https://your-project.supabase.co"
+    SUPABASE_ANON_KEY = "your-anon-key"
+    ```
+    
+    ### 📚 详细配置说明：
+    请查看项目文档：`SUPABASE_SETUP.md`
+    """)
+    with st.expander("查看详细错误信息"):
+        st.code(DB_ERROR, language="text")
+    st.stop()
 
 # 初始化数据库（仅在首次运行时执行）
 if 'db_initialized' not in st.session_state:
