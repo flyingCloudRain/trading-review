@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import sys
 
@@ -931,6 +931,128 @@ try:
                 "0%",
                 help="暂无涨停股票数据"
             )
+    
+    # 最近1个月每日涨停股票总数趋势
+    st.markdown("#### 📈 最近1个月每日涨停股票总数趋势")
+    try:
+        # 获取最近1个月的数据
+        trend_end_date = get_utc8_date()
+        trend_start_date = trend_end_date - timedelta(days=29)  # 30天（包含今天）
+        
+        db_trend = SessionLocal()
+        try:
+            trend_stocks = ZtPoolHistoryService.get_zt_pool_by_date_range(db_trend, trend_start_date, trend_end_date)
+            db_trend.close()
+            
+            if trend_stocks:
+                trend_df = pd.DataFrame(trend_stocks)
+                
+                if 'date' in trend_df.columns and len(trend_df) > 0:
+                    # 按日期统计每日涨停股票总数
+                    daily_count = trend_df.groupby('date').size().reset_index(name='涨停股票数')
+                    daily_count['date'] = pd.to_datetime(daily_count['date'])
+                    
+                    # 过滤非交易日
+                    from utils.time_utils import filter_trading_days
+                    daily_count = filter_trading_days(daily_count, date_column='date')
+                    
+                    if daily_count.empty:
+                        st.info("暂无交易日数据")
+                    else:
+                        daily_count = daily_count.sort_values('date')
+                        
+                        # 确保date列是datetime类型，然后转换为字符串格式，用于X轴显示（避免非交易日空白）
+                        if not pd.api.types.is_datetime64_any_dtype(daily_count['date']):
+                            daily_count['date'] = pd.to_datetime(daily_count['date'])
+                        daily_count['date_str'] = daily_count['date'].dt.strftime('%Y-%m-%d')
+                        
+                        # 创建折线图 - 使用统一配置
+                        from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
+                        
+                        fig_trend = go.Figure()
+                        
+                        # 主折线 - 使用日期字符串作为X轴，确保数据点连续无空白
+                        fig_trend.add_trace(go.Scatter(
+                            x=daily_count['date_str'],
+                            y=daily_count['涨停股票数'],
+                            mode='lines+markers',
+                            name='涨停股票数',
+                            line=dict(
+                                color=LINE_CHART_COLORS['warning'],
+                                width=LINE_CHART_CONFIG['line_width'],
+                                shape='spline'  # 平滑曲线
+                            ),
+                            marker=dict(
+                                color=LINE_CHART_COLORS['warning'],
+                                size=LINE_CHART_CONFIG['marker_size'],
+                                line=dict(
+                                    width=LINE_CHART_CONFIG['marker_line_width'],
+                                    color=LINE_CHART_CONFIG['marker_line_color']
+                                )
+                            ),
+                            fill='tozeroy',  # 填充到零线
+                            fillcolor=f"rgba(245, 158, 11, {LINE_CHART_CONFIG['fill_opacity']})"  # 橙色填充
+                        ))
+                        
+                        # 添加平均值线
+                        avg_count = daily_count['涨停股票数'].mean()
+                        fig_trend.add_hline(
+                            y=avg_count,
+                            line_dash="dash",
+                            line_color="#64748b",
+                            opacity=0.7,
+                            line_width=2,
+                            annotation_text=f"平均值: {avg_count:.1f}",
+                            annotation_position="right",
+                            annotation_font_size=12,
+                            annotation_bgcolor="rgba(100, 116, 139, 0.1)"
+                        )
+                        
+                        # X轴使用类别模式，只显示交易日，数据点连续无空白
+                        fig_trend.update_layout(
+                            title=dict(
+                                text="最近1个月每日涨停股票总数趋势",
+                                font=dict(size=LINE_CHART_CONFIG['title_font_size']),
+                                x=0.5,
+                                xanchor='center'
+                            ),
+                            xaxis=dict(
+                                type='category',  # 使用类别轴，避免非交易日空白
+                                title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
+                                gridcolor=LINE_CHART_CONFIG['grid_color'],
+                                gridwidth=LINE_CHART_CONFIG['grid_width'],
+                                showgrid=True,
+                                tickangle=-45  # 倾斜角度，避免日期重叠
+                            ),
+                            yaxis=dict(
+                                title=dict(text="涨停股票数", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
+                                gridcolor=LINE_CHART_CONFIG['grid_color'],
+                                gridwidth=LINE_CHART_CONFIG['grid_width'],
+                                showgrid=True
+                            ),
+                            height=LINE_CHART_CONFIG['height'],
+                            hovermode='x unified',
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=1.02,
+                                xanchor="right",
+                                x=1
+                            )
+                        )
+                        
+                        st.plotly_chart(fig_trend, use_container_width=True)
+                else:
+                    st.info("暂无趋势数据")
+            else:
+                st.info("暂无最近1个月的涨停股票数据")
+        except Exception as e:
+            db_trend.close()
+            st.warning(f"⚠️ 获取趋势数据失败: {str(e)}")
+    except Exception as e:
+        st.warning(f"⚠️ 获取趋势数据失败: {str(e)}")
     
     col1, col2, col3 = st.columns(3)
     
