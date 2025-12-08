@@ -18,6 +18,9 @@ class SectorHistoryService:
         - 如果不在交易时间内，使用上一个交易日
         - 如果提供了target_date，则使用指定的日期
         
+        注意：AKShare API 只能获取实时数据，无法获取历史数据。
+        如果 target_date 不是今天或最近的交易日，保存的将是实时数据，而不是历史数据。
+        
         使用事务和锁机制防止重复数据：
         1. 先获取数据（避免在删除后获取数据时出现问题）
         2. 在事务中删除旧数据
@@ -27,6 +30,8 @@ class SectorHistoryService:
             sector_type: 板块类型，'industry'（行业板块）或 'concept'（概念板块）
             target_date: 可选，指定保存的日期。如果为None，则自动判断日期
         """
+        from utils.time_utils import get_utc8_date, get_data_date
+        
         if target_date is None:
             data_date = get_data_date()
         else:
@@ -36,8 +41,16 @@ class SectorHistoryService:
         if sector_type not in ['industry', 'concept']:
             raise ValueError(f"Invalid sector_type: {sector_type}. Must be 'industry' or 'concept'")
         
+        # 警告：如果 target_date 不是今天，API 只能获取实时数据
+        today = get_utc8_date()
+        if target_date is not None and target_date != today:
+            print(f"⚠️  警告: target_date ({target_date}) 不是今天 ({today})")
+            print(f"⚠️  AKShare API 只能获取实时数据，无法获取历史数据。")
+            print(f"⚠️  保存的数据将是 {today} 的实时数据，但日期标记为 {target_date}。")
+            print(f"⚠️  建议：只在交易日当天保存数据，或使用 target_date=None 自动判断日期。")
+        
         try:
-            # 根据类型获取板块数据
+            # 根据类型获取板块数据（注意：API 返回的是实时数据）
             if sector_type == 'industry':
                 sectors = SectorService.get_industry_summary()
             else:
