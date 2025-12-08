@@ -292,9 +292,9 @@ try:
         except Exception as e:
             st.warning(f"显示趋势图失败: {str(e)}")
         
-        # 前一交易日涨停股票今日表现
+        # 前一交易日涨停股票（暂时只显示前日涨停股票）
         st.markdown("---")
-        st.markdown('<h2 class="section-header">📊 前一交易日涨停股票今日表现</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">📊 前一交易日涨停股票</h2>', unsafe_allow_html=True)
         
         try:
             # 获取前一交易日
@@ -327,185 +327,66 @@ try:
                     db_prev.close()
                     
                     if prev_zt_stocks and len(prev_zt_stocks) > 0:
-                        # 提取股票代码列表
-                        prev_stock_codes = [stock.get('code') for stock in prev_zt_stocks if stock.get('code')]
+                        # 转换为DataFrame用于显示
+                        display_data = []
+                        for stock in prev_zt_stocks:
+                            display_data.append({
+                                '代码': stock.get('code', ''),
+                                '名称': stock.get('name', ''),
+                                '涨跌幅(%)': stock.get('changePercent', 0),
+                                '最新价': stock.get('latestPrice', 0),
+                                '成交额(亿)': stock.get('turnover', 0),
+                                '流通市值(亿)': stock.get('circulatingMarketValue', 0),
+                                '总市值(亿)': stock.get('totalMarketValue', 0),
+                                '换手率(%)': stock.get('turnoverRate', 0),
+                                '封板资金(亿)': stock.get('sealingFunds', 0),
+                                '首次封板时间': stock.get('firstSealingTime', ''),
+                                '最后封板时间': stock.get('lastSealingTime', ''),
+                                '炸板次数': stock.get('explosionCount', 0),
+                                '连板数': stock.get('continuousBoards', 0),
+                                '所属行业': stock.get('industry', '')
+                            })
                         
-                        if prev_stock_codes:
-                            # 判断是否未到下一交易日
-                            # 如果前一交易日就是今天或大于今天，说明未到下一交易日，获取再前一交易日的表现
-                            if prev_trading_day >= today:
-                                # 未到下一交易日，获取再前一交易日的表现
-                                # 从数据库中查找再前一个交易日
-                                db_check2 = SessionLocal()
-                                try:
-                                    from models.zt_pool_history import ZtPoolHistory
-                                    recent_dates = db_check2.query(ZtPoolHistory.date).distinct().order_by(ZtPoolHistory.date.desc()).limit(10).all()
-                                    target_date = None
-                                    if recent_dates:
-                                        # 找到小于 prev_trading_day 的最大日期
-                                        for date_tuple in recent_dates:
-                                            if date_tuple[0] < prev_trading_day:
-                                                target_date = date_tuple[0]
-                                                break
-                                    
-                                    if target_date:
-                                        query_date = target_date
-                                    else:
-                                        st.warning(f"⚠️ 未找到再前一交易日数据")
-                                        query_date = None
-                                finally:
-                                    db_check2.close()
-                            else:
-                                # 正常情况，获取今日表现
-                                query_date = today
-                            
-                            if query_date:
-                                # 使用 stock_zh_a_hist 接口获取表现数据
-                                try:
-                                    # 获取查询日期字符串（YYYYMMDD格式）
-                                    query_date_str = query_date.strftime('%Y%m%d')
-                                    
-                                    # 为每个股票获取历史数据
-                                    display_data = []
-                                    total_codes = len(prev_stock_codes)
-                                    
-                                    # 显示进度信息
-                                    status_text = st.empty()
-                                    progress_bar = st.progress(0)
-                                    
-                                    # 预先获取股票名称（只获取一次）
-                                    stock_name_cache = {}
-                                    try:
-                                        status_text.info("🔄 正在获取股票名称列表...")
-                                        spot_df = ak.stock_zh_a_spot_em()
-                                        if not spot_df.empty and '代码' in spot_df.columns:
-                                            spot_df['code_normalized'] = spot_df['代码'].astype(str).str.replace('sh', '').str.replace('sz', '').str.replace('bj', '').str.strip()
-                                            stock_name_cache = dict(zip(spot_df['code_normalized'], spot_df['名称']))
-                                    except Exception as e:
-                                        print(f"获取股票名称列表失败: {str(e)}")
-                                    
-                                    status_text.info(f"🔄 正在获取 {total_codes} 只股票的表现数据，请稍候...")
-                                    
-                                    for idx, code in enumerate(prev_stock_codes):
-                                        # 重试机制
-                                        max_retries = 3
-                                        retry_delay = 1
-                                        hist_df = None
-                                        
-                                        for retry in range(max_retries):
-                                            try:
-                                                # 获取该股票的历史数据（指定日期）
-                                                hist_df = ak.stock_zh_a_hist(symbol=code, start_date=query_date_str, end_date=query_date_str)
-                                                break  # 成功获取，跳出重试循环
-                                            except Exception as e:
-                                                if retry < max_retries - 1:
-                                                    # 等待后重试
-                                                    time.sleep(retry_delay * (retry + 1))
-                                                    continue
-                                                else:
-                                                    # 最后一次重试失败
-                                                    print(f"获取股票 {code} 数据失败（已重试{max_retries}次）: {str(e)}")
-                                                    hist_df = None
-                                        
-                                        if hist_df is not None and not hist_df.empty:
-                                            # 获取最新一条数据（查询日期数据）
-                                            date_data = hist_df.iloc[-1]
-                                            
-                                            # 获取前一交易日的股票信息
-                                            prev_stock_info = next((s for s in prev_zt_stocks if s.get('code') == code), None)
-                                            
-                                            # 从缓存中获取股票名称
-                                            stock_name = stock_name_cache.get(code, "N/A")
-                                            
-                                            # 根据查询日期确定列名
-                                            if query_date >= today:
-                                                date_label = f"{query_date.strftime('%Y-%m-%d')}"
-                                            else:
-                                                date_label = "今日"
-                                            
-                                            display_data.append({
-                                                '代码': code,
-                                                '名称': stock_name,
-                                                '前一交易日连板数': prev_stock_info.get('continuousBoards', 0) if prev_stock_info else 0,
-                                                f'{date_label}收盘价': date_data.get('收盘', 0),
-                                                f'{date_label}涨跌幅(%)': date_data.get('涨跌幅', 0),
-                                                f'{date_label}涨跌额': date_data.get('涨跌额', 0),
-                                                f'{date_label}成交量': date_data.get('成交量', 0),
-                                                f'{date_label}成交额': date_data.get('成交额', 0),
-                                                f'{date_label}开盘': date_data.get('开盘', 0),
-                                                f'{date_label}最高': date_data.get('最高', 0),
-                                                f'{date_label}最低': date_data.get('最低', 0)
-                                            })
-                                        
-                                        # 更新进度条和状态
-                                        progress = (idx + 1) / total_codes
-                                        progress_bar.progress(progress)
-                                        status_text.info(f"🔄 正在获取股票表现数据... ({idx + 1}/{total_codes})")
-                                        
-                                        # 添加延迟，避免请求过快（每次请求后延迟）
-                                        time.sleep(0.3)
-                                
-                                    # 清空进度条和状态
-                                    progress_bar.empty()
-                                    status_text.empty()
-                                    
-                                    if display_data:
-                                        
-                                        df_display = pd.DataFrame(display_data)
-                                        
-                                        # 确定涨跌幅列名
-                                        change_pct_col = [col for col in df_display.columns if '涨跌幅' in col]
-                                        if change_pct_col:
-                                            change_pct_col = change_pct_col[0]
-                                            
-                                            # 按涨跌幅排序
-                                            df_display = df_display.sort_values(change_pct_col, ascending=False)
-                                            
-                                            # 保存原始数值用于统计（在格式化之前）
-                                            df_display['涨跌幅数值'] = df_display[change_pct_col].copy()
-                                            
-                                            # 格式化数值列
-                                            numeric_cols = [col for col in df_display.columns if col not in ['代码', '名称', '前一交易日连板数', '涨跌幅数值']]
-                                            for col in numeric_cols:
-                                                if '涨跌幅' in col:
-                                                    df_display[col] = df_display[col].apply(lambda x: f"{x:+.2f}%" if pd.notna(x) else "N/A")
-                                                elif '涨跌额' in col:
-                                                    df_display[col] = df_display[col].apply(lambda x: f"{x:+.2f}" if pd.notna(x) else "N/A")
-                                                elif '成交额' in col:
-                                                    df_display[col] = df_display[col].apply(lambda x: f"{x/100000000:.2f}亿" if pd.notna(x) and x >= 100000000 else f"{x/10000:.2f}万" if pd.notna(x) else "N/A")
-                                                elif '成交量' in col:
-                                                    df_display[col] = df_display[col].apply(lambda x: f"{x/10000:.2f}万手" if pd.notna(x) and x >= 10000 else f"{x:.0f}手" if pd.notna(x) else "N/A")
-                                                else:
-                                                    df_display[col] = df_display[col].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
-                                            
-                                            # 统计信息（使用原始数值）
-                                            col_stat1, col_stat2, col_stat3 = st.columns(3)
-                                            with col_stat1:
-                                                up_count = len(df_display[df_display['涨跌幅数值'] > 0])
-                                                date_label_short = query_date.strftime('%m-%d') if query_date >= today else "今日"
-                                                st.metric(f"📈 {date_label_short}上涨", f"{up_count}", delta=f"{up_count}/{len(df_display)}")
-                                            with col_stat2:
-                                                down_count = len(df_display[df_display['涨跌幅数值'] < 0])
-                                                st.metric(f"📉 {date_label_short}下跌", f"{down_count}", delta=f"{down_count}/{len(df_display)}")
-                                            with col_stat3:
-                                                avg_change = df_display['涨跌幅数值'].mean()
-                                                st.metric("📊 平均涨跌幅", f"{avg_change:+.2f}%")
-                                            
-                                            # 删除临时列
-                                            df_display = df_display.drop(columns=['涨跌幅数值'])
-                                        
-                                        # 显示数据表格
-                                        st.dataframe(df_display, use_container_width=True, height=400)
-                                    else:
-                                        st.warning(f"⚠️ 前一交易日（{prev_trading_day}）的涨停股票中，{query_date.strftime('%Y-%m-%d') if query_date else '指定日期'}未找到匹配的股票数据")
-                                except Exception as e:
-                                    st.error(f"❌ 获取股票表现数据失败: {str(e)}")
-                                    import traceback
-                                    st.code(traceback.format_exc())
-                            else:
-                                st.warning("⚠️ 无法确定查询日期")
-                        else:
-                            st.info(f"📭 前一交易日（{prev_trading_day}）没有涨停股票数据")
+                        df_display = pd.DataFrame(display_data)
+                        
+                        # 在格式化之前计算统计信息
+                        continuous_boards_count = len(df_display[df_display['连板数'] > 1]) if '连板数' in df_display.columns else 0
+                        total_sealing_funds = df_display['封板资金(亿)'].sum() if '封板资金(亿)' in df_display.columns else 0
+                        
+                        # 按连板数降序排序，然后按涨跌幅降序排序
+                        df_display = df_display.sort_values(['连板数', '涨跌幅(%)'], ascending=[False, False])
+                        
+                        # 格式化数值列
+                        if '涨跌幅(%)' in df_display.columns:
+                            df_display['涨跌幅(%)'] = df_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%" if pd.notna(x) else "N/A")
+                        if '最新价' in df_display.columns:
+                            df_display['最新价'] = df_display['最新价'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                        if '成交额(亿)' in df_display.columns:
+                            df_display['成交额(亿)'] = df_display['成交额(亿)'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                        if '流通市值(亿)' in df_display.columns:
+                            df_display['流通市值(亿)'] = df_display['流通市值(亿)'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                        if '总市值(亿)' in df_display.columns:
+                            df_display['总市值(亿)'] = df_display['总市值(亿)'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                        if '换手率(%)' in df_display.columns:
+                            df_display['换手率(%)'] = df_display['换手率(%)'].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "N/A")
+                        if '封板资金(亿)' in df_display.columns:
+                            df_display['封板资金(亿)'] = df_display['封板资金(亿)'].apply(lambda x: f"{x:.2f}" if pd.notna(x) else "N/A")
+                        if '连板数' in df_display.columns:
+                            df_display['连板数'] = df_display['连板数'].apply(lambda x: str(int(x)) if pd.notna(x) else "N/A")
+                        if '炸板次数' in df_display.columns:
+                            df_display['炸板次数'] = df_display['炸板次数'].apply(lambda x: str(int(x)) if pd.notna(x) else "N/A")
+                        
+                        # 显示统计信息
+                        col_stat1, col_stat2, col_stat3 = st.columns(3)
+                        with col_stat1:
+                            st.metric("📊 涨停股票数", len(df_display))
+                        with col_stat2:
+                            st.metric("📈 连板股票数", continuous_boards_count, delta=f"{continuous_boards_count}/{len(df_display)}")
+                        with col_stat3:
+                            st.metric("💰 总封板资金", f"{total_sealing_funds:.2f}亿")
+                        
+                        # 显示数据表格
+                        st.dataframe(df_display, use_container_width=True, height=400)
                     else:
                         st.info(f"📭 前一交易日（{prev_trading_day}）没有涨停股票数据")
                 except Exception as e:
@@ -513,7 +394,7 @@ try:
                         db_prev.close()
                     st.warning(f"⚠️ 获取前一交易日数据失败: {str(e)}")
         except Exception as e:
-            st.warning(f"⚠️ 显示前一交易日涨停股票今日表现失败: {str(e)}")
+            st.warning(f"⚠️ 显示前一交易日涨停股票失败: {str(e)}")
         
         # 行业分布
         if 'industry' in df.columns:
