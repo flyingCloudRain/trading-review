@@ -180,14 +180,13 @@ try:
                         
                         if daily_count.empty:
                             st.info("暂无交易日数据")
-                            continue
-                        
-                        daily_count = daily_count.sort_values('date')
-                        
-                        # 创建折线图 - 使用统一配置
-                        from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
-                        
-                        fig_trend = go.Figure()
+                        else:
+                            daily_count = daily_count.sort_values('date')
+                            
+                            # 创建折线图 - 使用统一配置
+                            from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
+                            
+                            fig_trend = go.Figure()
                         
                         # 主折线
                         fig_trend.add_trace(go.Scatter(
