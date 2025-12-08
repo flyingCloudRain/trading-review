@@ -14,12 +14,59 @@ logger = logging.getLogger(__name__)
 # 创建数据库引擎（强制使用Supabase PostgreSQL）
 try:
     database_url = SupabaseConfig.get_database_url()
+    
+    # 修复 IPv6 连接问题：强制使用 IPv4
+    # Streamlit Cloud 可能不支持 IPv6，需要强制使用 IPv4 地址
+    # 通过解析域名获取 IPv4 地址
+    import socket
+    import urllib.parse
+    
+    parsed = urllib.parse.urlparse(database_url)
+    hostname = parsed.hostname
+    
+    # 尝试解析域名获取 IPv4 地址
+    try:
+        # 只获取 IPv4 地址（AF_INET）
+        ip_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+        
+        if ip_addresses:
+            # 使用第一个 IPv4 地址
+            ipv4_address = ip_addresses[0][4][0]
+            
+            # 重建连接字符串，使用 IPv4 地址
+            new_netloc = f"{parsed.username}:{parsed.password}@{ipv4_address}:{parsed.port or 5432}"
+            database_url = urllib.parse.urlunparse((
+                parsed.scheme,
+                new_netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
+            logger.info(f"✅ 使用 IPv4 地址连接: {ipv4_address} (原始主机名: {hostname})")
+        else:
+            logger.warning(f"⚠️ 无法解析 IPv4 地址，使用原始主机名: {hostname}")
+    except socket.gaierror as e:
+        logger.warning(f"⚠️ DNS 解析失败，使用原始主机名: {e}")
+    except Exception as e:
+        logger.warning(f"⚠️ 解析 IPv4 地址时出错，使用原始连接: {e}")
+    
+    # 连接参数：设置超时和连接选项
+    connect_args = {
+        'connect_timeout': 10,
+        'keepalives': 1,
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5
+    }
+    
     engine = create_engine(
         database_url,
         pool_pre_ping=True,  # 连接前ping，确保连接有效
         pool_size=5,  # 连接池大小
         max_overflow=10,  # 最大溢出连接数
-        echo=False  # 是否打印SQL语句
+        echo=False,  # 是否打印SQL语句
+        connect_args=connect_args  # 连接参数
     )
     print("✅ 已连接到 Supabase PostgreSQL 数据库")
 except ValueError as e:
