@@ -31,78 +31,78 @@ try:
         print(f"⚠️ 连接池配置失败，使用标准连接: {e}")
         database_url = SupabaseConfig.get_database_url(use_pooler=False)
     
-    # 修复 IPv6 连接问题：强制使用 IPv4
-    # Streamlit Cloud 可能不支持 IPv6，需要强制使用 IPv4 地址
-    # 通过解析域名获取 IPv4 地址
+    # 支持 IPv6 连接：优先使用 IPv6，如果失败则回退到 IPv4
+    # 通过解析域名获取 IP 地址
     import socket
     import urllib.parse
     
     parsed = urllib.parse.urlparse(database_url)
     hostname = parsed.hostname
     
-    # 修复 IPv6 连接问题：强制使用 IPv4
-    # Streamlit Cloud 可能不支持 IPv6，需要强制使用 IPv4 地址
-    try:
-        # 只获取 IPv4 地址（AF_INET），忽略 IPv6
-        ip_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
-        
-        if ip_addresses:
-            # 使用第一个 IPv4 地址
-            ipv4_address = ip_addresses[0][4][0]
-            
-            # 重建连接字符串，使用 IPv4 地址
-            new_netloc = f"{parsed.username}:{parsed.password}@{ipv4_address}:{parsed.port or 5432}"
-            database_url = urllib.parse.urlunparse((
-                parsed.scheme,
-                new_netloc,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment
-            ))
-            logger.info(f"✅ 使用 IPv4 地址连接: {ipv4_address} (原始主机名: {hostname})")
-            print(f"✅ 使用 IPv4 地址连接: {ipv4_address} (原始主机名: {hostname})")
-        else:
-            logger.warning(f"⚠️ 无法解析 IPv4 地址，使用原始主机名: {hostname}")
-            print(f"⚠️ 无法解析 IPv4 地址，使用原始主机名: {hostname}")
-    except socket.gaierror as e:
-        logger.warning(f"⚠️ DNS 解析失败，使用原始主机名: {e}")
-        print(f"⚠️ DNS 解析失败，使用原始主机名: {e}")
-    except Exception as e:
-        logger.warning(f"⚠️ 解析 IPv4 地址时出错，使用原始连接: {e}")
-        print(f"⚠️ 解析 IPv4 地址时出错，使用原始连接: {e}")
+    # 移除 IPv6 方括号（如果有）
+    if hostname and hostname.startswith('[') and hostname.endswith(']'):
+        hostname = hostname[1:-1]
     
-    # 额外处理：如果连接字符串中包含 IPv6 地址，强制替换为 IPv4
-    # 检查是否有 IPv6 地址格式（包含冒号）
-    if '::' in database_url or '[' in database_url:
-        logger.warning("⚠️ 检测到 IPv6 地址格式，尝试强制使用 IPv4")
-        print("⚠️ 检测到 IPv6 地址格式，尝试强制使用 IPv4")
-        # 重新解析并强制使用 IPv4
+    # 优先尝试 IPv6，如果失败则使用 IPv4
+    ip_address = None
+    ip_version = None
+    
+    try:
+        # 首先尝试获取 IPv6 地址（AF_INET6）
+        ipv6_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET6, socket.SOCK_STREAM)
+        
+        if ipv6_addresses:
+            # 使用第一个 IPv6 地址
+            ip_address = ipv6_addresses[0][4][0]
+            ip_version = "IPv6"
+            # IPv6 地址需要用方括号包裹
+            formatted_ip = f"[{ip_address}]"
+            logger.info(f"✅ 使用 IPv6 地址连接: {ip_address} (原始主机名: {hostname})")
+            print(f"✅ 使用 IPv6 地址连接: {ip_address} (原始主机名: {hostname})")
+        else:
+            # 如果没有 IPv6，尝试 IPv4
+            ipv4_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+            if ipv4_addresses:
+                ip_address = ipv4_addresses[0][4][0]
+                ip_version = "IPv4"
+                formatted_ip = ip_address
+                logger.info(f"✅ 使用 IPv4 地址连接: {ip_address} (原始主机名: {hostname})")
+                print(f"✅ 使用 IPv4 地址连接: {ip_address} (原始主机名: {hostname})")
+            else:
+                logger.warning(f"⚠️ 无法解析 IP 地址，使用原始主机名: {hostname}")
+                print(f"⚠️ 无法解析 IP 地址，使用原始主机名: {hostname}")
+    except socket.gaierror as e:
+        # DNS 解析失败，尝试 IPv4 作为备选
+        logger.warning(f"⚠️ IPv6 DNS 解析失败，尝试 IPv4: {e}")
+        print(f"⚠️ IPv6 DNS 解析失败，尝试 IPv4: {e}")
         try:
-            parsed = urllib.parse.urlparse(database_url)
-            hostname = parsed.hostname
-            # 移除 IPv6 方括号
-            if hostname and hostname.startswith('[') and hostname.endswith(']'):
-                hostname = hostname[1:-1]
-            
-            # 再次尝试获取 IPv4 地址
-            ip_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
-            if ip_addresses:
-                ipv4_address = ip_addresses[0][4][0]
-                new_netloc = f"{parsed.username}:{parsed.password}@{ipv4_address}:{parsed.port or 5432}"
-                database_url = urllib.parse.urlunparse((
-                    parsed.scheme,
-                    new_netloc,
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
-                logger.info(f"✅ 强制使用 IPv4 地址: {ipv4_address}")
-                print(f"✅ 强制使用 IPv4 地址: {ipv4_address}")
-        except Exception as e:
-            logger.error(f"❌ 强制 IPv4 转换失败: {e}")
-            print(f"❌ 强制 IPv4 转换失败: {e}")
+            ipv4_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+            if ipv4_addresses:
+                ip_address = ipv4_addresses[0][4][0]
+                ip_version = "IPv4"
+                formatted_ip = ip_address
+                logger.info(f"✅ 回退到 IPv4 地址连接: {ip_address}")
+                print(f"✅ 回退到 IPv4 地址连接: {ip_address}")
+        except Exception as e2:
+            logger.warning(f"⚠️ IPv4 DNS 解析也失败，使用原始主机名: {e2}")
+            print(f"⚠️ IPv4 DNS 解析也失败，使用原始主机名: {e2}")
+    except Exception as e:
+        logger.warning(f"⚠️ 解析 IP 地址时出错，使用原始连接: {e}")
+        print(f"⚠️ 解析 IP 地址时出错，使用原始连接: {e}")
+    
+    # 如果成功解析到 IP 地址，使用 IP 地址替换域名
+    if ip_address and ip_version:
+        new_netloc = f"{parsed.username}:{parsed.password}@{formatted_ip}:{parsed.port or 5432}"
+        database_url = urllib.parse.urlunparse((
+            parsed.scheme,
+            new_netloc,
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment
+        ))
+        logger.info(f"✅ 最终使用 {ip_version} 地址: {formatted_ip}")
+        print(f"✅ 最终使用 {ip_version} 地址: {formatted_ip}")
     
     # 连接参数：设置超时和连接选项
     connect_args = {
