@@ -51,11 +51,16 @@ SUPABASE_ANON_KEY = "your-anon-key"
    - 在编辑器中添加以下内容（使用 TOML 格式）：
 
 ```toml
-SUPABASE_PROJECT_REF = "你的项目引用ID"
-SUPABASE_DB_PASSWORD = "你的数据库密码"
-SUPABASE_URL = "https://你的项目.supabase.co"
-SUPABASE_ANON_KEY = "你的匿名密钥"
+# 必需配置（与本地 .env 文件保持一致）
+SUPABASE_PROJECT_REF = "uvtmbjgndhcmlupridss"
+SUPABASE_DB_PASSWORD = "n/QSrA!T/P@Wf6."
+
+# 可选配置（与本地 .env 文件保持一致）
+SUPABASE_URL = "https://uvtmbjgndhcmlupridss.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2dG1iamduZGhjbWx1cHJpZHNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM0MDA2MjksImV4cCI6MjA3ODk3NjYyOX0.KCu_julbsWVNtfVQKWZIefJKVMdqsBoHL8o44DwxbRY"
 ```
+
+**⚠️ 注意**：以上配置与本地 `.env` 文件保持一致，可以直接复制使用。
 
 3. **保存并重新部署**
    - 点击 **"Save"** 保存配置
