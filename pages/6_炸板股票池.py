@@ -173,6 +173,15 @@ try:
                         # 按日期统计每日炸板股票总数
                         daily_count = trend_df.groupby('date').size().reset_index(name='炸板股票数')
                         daily_count['date'] = pd.to_datetime(daily_count['date'])
+                        
+                        # 过滤非交易日
+                        from utils.time_utils import filter_trading_days
+                        daily_count = filter_trading_days(daily_count, date_column='date')
+                        
+                        if daily_count.empty:
+                            st.info("暂无交易日数据")
+                            continue
+                        
                         daily_count = daily_count.sort_values('date')
                         
                         # 创建折线图 - 使用统一配置

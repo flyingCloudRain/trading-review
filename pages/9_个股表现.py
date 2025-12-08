@@ -204,6 +204,11 @@ if stock_code:
         hist_chart = hist_df.head(selected_days).copy()
         hist_chart = hist_chart.sort_values('日期', ascending=True)
         
+        # 过滤非交易日（如果日期列存在）
+        if '日期' in hist_chart.columns:
+            from utils.time_utils import filter_trading_days
+            hist_chart = filter_trading_days(hist_chart, date_column='日期')
+        
         # K线图
         fig_kline = go.Figure()
         

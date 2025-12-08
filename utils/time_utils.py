@@ -160,3 +160,67 @@ def get_data_date() -> date:
         # 如果出错，使用上一个交易日（保守策略）
         return get_last_trading_day()
 
+def is_trading_day(target_date: date) -> bool:
+    """
+    检查指定日期是否为交易日（基于北京时间UTC+8）
+    
+    :param target_date: 要检查的日期
+    :return: True表示是交易日，False表示不是交易日
+    """
+    try:
+        import akshare as ak
+        import pandas as pd
+        
+        # 获取交易日历
+        trade_dates = ak.tool_trade_date_hist_sina()
+        if trade_dates is not None and not trade_dates.empty:
+            # 将日期列转换为date对象
+            trade_dates['date'] = pd.to_datetime(trade_dates['trade_date']).dt.date
+            # 检查目标日期是否在交易日列表中
+            return target_date in trade_dates['date'].tolist()
+        else:
+            # 如果无法获取交易日历，默认认为是交易日
+            return True
+    except Exception:
+        # 如果出错，默认认为是交易日
+        return True
+
+def filter_trading_days(df: pd.DataFrame, date_column: str = 'date') -> pd.DataFrame:
+    """
+    过滤DataFrame，只保留交易日的数据
+    
+    :param df: 要过滤的DataFrame
+    :param date_column: 日期列的名称，默认为'date'
+    :return: 过滤后的DataFrame，只包含交易日的数据
+    """
+    if df.empty or date_column not in df.columns:
+        return df
+    
+    try:
+        import pandas as pd
+        import akshare as ak
+        
+        # 获取交易日历
+        trade_dates = ak.tool_trade_date_hist_sina()
+        if trade_dates is not None and not trade_dates.empty:
+            # 将日期列转换为date对象
+            trade_dates['date'] = pd.to_datetime(trade_dates['trade_date']).dt.date
+            trading_date_set = set(trade_dates['date'].tolist())
+            
+            # 确保DataFrame的日期列是date类型
+            if pd.api.types.is_datetime64_any_dtype(df[date_column]):
+                df[date_column] = df[date_column].dt.date
+            elif isinstance(df[date_column].iloc[0], str):
+                df[date_column] = pd.to_datetime(df[date_column]).dt.date
+            
+            # 过滤出交易日
+            filtered_df = df[df[date_column].isin(trading_date_set)].copy()
+            return filtered_df
+        else:
+            # 如果无法获取交易日历，返回原DataFrame
+            return df
+    except Exception as e:
+        # 如果出错，返回原DataFrame
+        print(f"⚠️  过滤交易日时出错: {str(e)}")
+        return df
+

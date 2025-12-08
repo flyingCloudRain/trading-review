@@ -14,6 +14,7 @@ from chart_config.chart_config import (
     CHART_CONFIG,
     LAYOUT_CONFIG
 )
+from utils.time_utils import filter_trading_days
 
 def create_sector_trend_chart(
     df: pd.DataFrame,
@@ -47,6 +48,12 @@ def create_sector_trend_chart(
     # 确保日期是datetime类型
     if not pd.api.types.is_datetime64_any_dtype(filtered_df[date_col]):
         filtered_df[date_col] = pd.to_datetime(filtered_df[date_col])
+    
+    # 过滤非交易日
+    filtered_df = filter_trading_days(filtered_df, date_column=date_col)
+    
+    if filtered_df.empty:
+        return go.Figure()
     
     # 根据value_col设置不同的标签
     y_label_map = {
@@ -440,6 +447,13 @@ def create_heatmap(
         
         if df_copy.empty:
             print("Warning: All dates are invalid after conversion")
+            return go.Figure()
+        
+        # 过滤非交易日
+        df_copy = filter_trading_days(df_copy, date_column=x_col)
+        
+        if df_copy.empty:
+            print("Warning: No trading days found after filtering")
             return go.Figure()
         
         # 按日期排序
