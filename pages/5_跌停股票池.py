@@ -225,6 +225,7 @@ try:
                                 annotation_bgcolor="rgba(100, 116, 139, 0.1)"
                             )
                             
+                            # X轴只显示交易日（使用tickvals指定交易日）
                             fig_trend.update_layout(
                                 title=dict(
                                     text="最近2周每日跌停股票总数趋势",
@@ -235,7 +236,8 @@ try:
                                 xaxis=dict(
                                     title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
                                     tickformat='%Y-%m-%d',
-                                    dtick='D1',
+                                    tickmode='array',  # 使用数组模式
+                                    tickvals=daily_count['date'].tolist(),  # 只显示交易日
                                     gridcolor=LINE_CHART_CONFIG['grid_color'],
                                     gridwidth=LINE_CHART_CONFIG['grid_width'],
                                     showgrid=True
