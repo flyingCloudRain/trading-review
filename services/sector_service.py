@@ -1,6 +1,7 @@
 import akshare as ak
 from typing import List, Dict, Optional
 import pandas as pd
+import time as time_module
 # 注意：Config 类在此文件中未使用，但保留导入以防将来需要
 # from config import Config
 
@@ -13,7 +14,6 @@ class SectorService:
         获取同花顺行业一览表
         对应akshare接口: stock_board_industry_summary_ths
         """
-        import time
         max_retries = 3
         retry_delay = 2
         
@@ -25,7 +25,7 @@ class SectorService:
                 if df is None:
                     if retry < max_retries - 1:
                         print(f"⚠️  API返回None，重试 {retry + 1}/{max_retries}...")
-                        time.sleep(retry_delay)
+                        time_module.sleep(retry_delay)
                         retry_delay *= 2
                         continue
                     else:
@@ -34,7 +34,7 @@ class SectorService:
                 if df.empty:
                     if retry < max_retries - 1:
                         print(f"⚠️  API返回空数据，重试 {retry + 1}/{max_retries}...")
-                        time.sleep(retry_delay)
+                        time_module.sleep(retry_delay)
                         retry_delay *= 2
                         continue
                     else:
@@ -47,18 +47,26 @@ class SectorService:
                 error_msg = str(e)
                 # 检查是否是"No tables found"错误
                 if "No tables found" in error_msg or "no tables" in error_msg.lower():
+                    # 检查当前时间是否在交易时间内
+                    from utils.time_utils import is_trading_time
+                    is_trading = is_trading_time()
+                    
                     if retry < max_retries - 1:
                         print(f"⚠️  检测到'No tables found'错误，重试 {retry + 1}/{max_retries}...")
-                        time.sleep(retry_delay)
+                        time_module.sleep(retry_delay)
                         retry_delay *= 2
                         continue
                     else:
-                        raise Exception(f'API返回"No tables found"错误，可能是非交易时间或API接口问题: {str(e)}')
+                        # 提供更友好的错误信息
+                        if not is_trading:
+                            raise Exception(f'API返回"No tables found"错误。当前时间不在交易时间内（交易时间：9:30-11:30, 13:00-15:00），这是正常现象。请稍后在交易时间内重试。')
+                        else:
+                            raise Exception(f'API返回"No tables found"错误，可能是API接口临时问题。已重试{max_retries}次，请稍后重试。')
                 else:
                     # 其他错误，如果是最后一次重试，则抛出异常
                     if retry < max_retries - 1:
                         print(f"⚠️  获取行业板块数据失败，重试 {retry + 1}/{max_retries}: {error_msg}")
-                        time.sleep(retry_delay)
+                        time_module.sleep(retry_delay)
                         retry_delay *= 2
                         continue
                     else:
