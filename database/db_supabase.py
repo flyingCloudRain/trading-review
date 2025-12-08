@@ -24,9 +24,10 @@ try:
     parsed = urllib.parse.urlparse(database_url)
     hostname = parsed.hostname
     
-    # 尝试解析域名获取 IPv4 地址
+    # 修复 IPv6 连接问题：强制使用 IPv4
+    # Streamlit Cloud 可能不支持 IPv6，需要强制使用 IPv4 地址
     try:
-        # 只获取 IPv4 地址（AF_INET）
+        # 只获取 IPv4 地址（AF_INET），忽略 IPv6
         ip_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
         
         if ip_addresses:
@@ -44,12 +45,48 @@ try:
                 parsed.fragment
             ))
             logger.info(f"✅ 使用 IPv4 地址连接: {ipv4_address} (原始主机名: {hostname})")
+            print(f"✅ 使用 IPv4 地址连接: {ipv4_address} (原始主机名: {hostname})")
         else:
             logger.warning(f"⚠️ 无法解析 IPv4 地址，使用原始主机名: {hostname}")
+            print(f"⚠️ 无法解析 IPv4 地址，使用原始主机名: {hostname}")
     except socket.gaierror as e:
         logger.warning(f"⚠️ DNS 解析失败，使用原始主机名: {e}")
+        print(f"⚠️ DNS 解析失败，使用原始主机名: {e}")
     except Exception as e:
         logger.warning(f"⚠️ 解析 IPv4 地址时出错，使用原始连接: {e}")
+        print(f"⚠️ 解析 IPv4 地址时出错，使用原始连接: {e}")
+    
+    # 额外处理：如果连接字符串中包含 IPv6 地址，强制替换为 IPv4
+    # 检查是否有 IPv6 地址格式（包含冒号）
+    if '::' in database_url or '[' in database_url:
+        logger.warning("⚠️ 检测到 IPv6 地址格式，尝试强制使用 IPv4")
+        print("⚠️ 检测到 IPv6 地址格式，尝试强制使用 IPv4")
+        # 重新解析并强制使用 IPv4
+        try:
+            parsed = urllib.parse.urlparse(database_url)
+            hostname = parsed.hostname
+            # 移除 IPv6 方括号
+            if hostname and hostname.startswith('[') and hostname.endswith(']'):
+                hostname = hostname[1:-1]
+            
+            # 再次尝试获取 IPv4 地址
+            ip_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+            if ip_addresses:
+                ipv4_address = ip_addresses[0][4][0]
+                new_netloc = f"{parsed.username}:{parsed.password}@{ipv4_address}:{parsed.port or 5432}"
+                database_url = urllib.parse.urlunparse((
+                    parsed.scheme,
+                    new_netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment
+                ))
+                logger.info(f"✅ 强制使用 IPv4 地址: {ipv4_address}")
+                print(f"✅ 强制使用 IPv4 地址: {ipv4_address}")
+        except Exception as e:
+            logger.error(f"❌ 强制 IPv4 转换失败: {e}")
+            print(f"❌ 强制 IPv4 转换失败: {e}")
     
     # 连接参数：设置超时和连接选项
     connect_args = {
