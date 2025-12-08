@@ -154,12 +154,12 @@ try:
             else:
                 st.metric("数据日期", start_date.strftime('%Y-%m-%d'))
         
-        # 最近2周每日炸板股票总数趋势
-        st.markdown("#### 📈 最近2周每日炸板股票总数趋势")
+        # 最近1个月每日炸板股票总数趋势
+        st.markdown("#### 📈 最近1个月每日炸板股票总数趋势")
         try:
-            # 获取最近2周的数据
+            # 获取最近1个月的数据
             trend_end_date = get_utc8_date()
-            trend_start_date = trend_end_date - timedelta(days=13)  # 14天（包含今天）
+            trend_start_date = trend_end_date - timedelta(days=29)  # 30天（包含今天）
             
             db_trend = SessionLocal()
             try:
@@ -233,7 +233,7 @@ try:
                             # X轴使用类别模式，只显示交易日，数据点连续无空白
                             fig_trend.update_layout(
                                 title=dict(
-                                    text="最近2周每日炸板股票总数趋势",
+                                    text="最近1个月每日炸板股票总数趋势",
                                     font=dict(size=LINE_CHART_CONFIG['title_font_size']),
                                     x=0.5,
                                     xanchor='center'
