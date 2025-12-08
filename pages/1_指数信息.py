@@ -399,7 +399,7 @@ try:
                     fig_trend.add_hrect(
                         y0=y_min,
                         y1=0,
-                        fillcolor="rgba(0, 200, 0, 0.15)",  # 浅绿色，透明度 15%
+                        fillcolor="rgba(0, 200, 0, 0.08)",  # 浅绿色，透明度 8%（更淡）
                         layer="below",
                         line_width=0,
                     )
@@ -408,7 +408,7 @@ try:
                     fig_trend.add_hrect(
                         y0=0,
                         y1=y_max,
-                        fillcolor="rgba(255, 0, 0, 0.15)",  # 浅红色，透明度 15%
+                        fillcolor="rgba(255, 0, 0, 0.08)",  # 浅红色，透明度 8%（更淡）
                         layer="below",
                         line_width=0,
                     )
