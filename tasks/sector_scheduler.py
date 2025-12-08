@@ -408,11 +408,57 @@ class SectorScheduler:
                 
             except Exception as e:
                 logger.error(f"数据库操作失败: {str(e)}", exc_info=True)
+                status = 'failed'
+                error_message = str(e)
+                error_traceback = traceback.format_exc()
             finally:
-                db.close()
+                # 记录执行情况
+                execution_end_time = get_utc8_now()
+                duration = (execution_end_time - execution_start_time).total_seconds()
+                
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=duration,
+                        concept_sectors_count=concept_count,
+                        error_message=error_message,
+                        error_traceback=error_traceback,
+                        is_trading_day=is_trading,
+                        notes=f"总耗时: {duration:.2f}秒 | 保存日期（当日交易日，北京时间）: {data_date} | 执行日期（北京时间）: {today}"
+                    )
+                    logger.info(f"✅ 执行记录已保存到数据库")
+                except Exception as e:
+                    logger.error(f"❌ 保存执行记录失败: {str(e)}", exc_info=True)
+                finally:
+                    db.close()
                 
         except Exception as e:
             logger.error(f"即时资金流定时任务执行失败: {str(e)}", exc_info=True)
+            # 记录失败执行
+            execution_end_time = get_utc8_now()
+            duration = (execution_end_time - execution_start_time).total_seconds()
+            db = SessionLocal()
+            try:
+                SchedulerExecutionService.create_execution(
+                    db=db,
+                    job_id=job_id,
+                    job_name=job_name,
+                    execution_date=today,
+                    execution_time=execution_start_time,
+                    status='failed',
+                    duration_seconds=duration,
+                    error_message=str(e),
+                    error_traceback=traceback.format_exc(),
+                    is_trading_day=is_trading,
+                    notes="任务执行异常"
+                )
+            finally:
+                db.close()
     
     def start(self):
         """启动调度器"""
