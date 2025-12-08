@@ -367,11 +367,12 @@ try:
                 
                 if focused_indices_data:
                     # 准备图表数据
-                    from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
+                    from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS, MULTI_LINE_COLORS
                     import plotly.colors as pc
                     
-                    # 获取多线条配色方案
-                    color_palette = pc.qualitative.Set3
+                    # 使用更鲜明的配色方案，使颜色区分更明显
+                    # 优先使用 MULTI_LINE_COLORS（更鲜明的颜色），如果不够则使用 Set1
+                    color_palette = MULTI_LINE_COLORS if len(focused_indices_data) <= len(MULTI_LINE_COLORS) else pc.qualitative.Set1
                     
                     fig_trend = go.Figure()
                     
@@ -414,7 +415,7 @@ try:
                                 color = color_palette[color_idx % len(color_palette)]
                                 color_idx += 1
                                 
-                                # 添加折线（线条更细）
+                                # 添加折线（使用更鲜明的颜色和稍粗的线条）
                                 fig_trend.add_trace(go.Scatter(
                                     x=df_index['date_str'],
                                     y=df_index['changePercent'],
@@ -422,14 +423,14 @@ try:
                                     name=f"{index_name}（{code_6digit}）",
                                     line=dict(
                                         color=color,
-                                        width=1.5,  # 线条更细（原来可能是 2 或更大）
+                                        width=2.5,  # 线条稍粗，使颜色更明显
                                         shape='spline'  # 平滑曲线
                                     ),
                                     marker=dict(
                                         color=color,
-                                        size=4,  # 标记点更小
+                                        size=5,  # 标记点稍大，使颜色更明显
                                         line=dict(
-                                            width=0.5,
+                                            width=1,
                                             color='white'
                                         )
                                     ),
