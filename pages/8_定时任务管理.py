@@ -16,6 +16,9 @@ sys.path.insert(0, str(project_root))
 
 from tasks.sector_scheduler import get_scheduler
 from utils.time_utils import UTC8, get_utc8_date
+from database.db import SessionLocal
+from services.scheduler_execution_service import SchedulerExecutionService
+from datetime import date, timedelta
 
 st.set_page_config(
     page_title="定时任务管理",
@@ -439,52 +442,191 @@ else:
 
 # 执行历史
 st.markdown("---")
-st.markdown("### 📜 执行历史")
+st.markdown("### 📜 执行历史（从数据库查询）")
 
-# 从 session state 获取执行历史
-execution_history = []
-for key in st.session_state.keys():
-    if key.startswith('execution_'):
-        execution_history.append(st.session_state[key])
+# 日期筛选
+col1, col2, col3 = st.columns([2, 2, 1])
+with col1:
+    start_date = st.date_input(
+        "开始日期",
+        value=get_utc8_date() - timedelta(days=7),
+        max_value=get_utc8_date(),
+        help="查询执行历史的开始日期"
+    )
+with col2:
+    end_date = st.date_input(
+        "结束日期",
+        value=get_utc8_date(),
+        max_value=get_utc8_date(),
+        help="查询执行历史的结束日期"
+    )
+with col3:
+    limit = st.number_input(
+        "显示条数",
+        min_value=10,
+        max_value=100,
+        value=50,
+        step=10,
+        help="最多显示的执行记录条数"
+    )
 
-if execution_history:
-    # 按执行时间倒序排列
-    execution_history.sort(key=lambda x: x.get('execution_time', ''), reverse=True)
-    
-    # 只显示最近10条
-    recent_history = execution_history[:10]
-    
-    history_data = []
-    for hist in recent_history:
-        status = hist.get('status', 'unknown')
-        if status == 'success':
-            status_text = "✅ 成功"
-            detail = str(hist.get('results', ''))
-        elif status == 'skipped':
-            status_text = "⏭️ 已跳过"
-            detail = hist.get('reason', '')
+# 任务筛选
+job_ids = ['save_daily_data', 'save_realtime_fund_flow_1510']
+selected_job_id = st.selectbox(
+    "筛选任务",
+    options=['全部'] + job_ids,
+    help="选择要查看的任务，或查看全部任务"
+)
+
+# 查询执行历史
+try:
+    db = SessionLocal()
+    try:
+        if selected_job_id == '全部':
+            # 查询日期范围内的所有执行记录
+            executions = SchedulerExecutionService.get_executions_by_date_range(
+                db, start_date, end_date
+            )
         else:
-            status_text = "❌ 失败"
-            detail = hist.get('error', '')
+            # 查询指定任务的执行记录
+            executions = SchedulerExecutionService.get_executions_by_job_id(
+                db, selected_job_id, limit=limit
+            )
+            # 按日期范围过滤
+            executions = [e for e in executions if start_date <= e.execution_date <= end_date]
         
-        history_data.append({
-            "执行时间": hist.get('execution_time', ''),
-            "任务名称": hist.get('job_name', ''),
-            "状态": status_text,
-            "详情": detail
-        })
-    
-    history_df = pd.DataFrame(history_data)
-    st.dataframe(history_df, use_container_width=True, hide_index=True)
-    
-    # 清除历史按钮
-    if st.button("🗑️ 清除执行历史"):
-        keys_to_remove = [key for key in st.session_state.keys() if key.startswith('execution_')]
-        for key in keys_to_remove:
-            del st.session_state[key]
-        st.rerun()
-else:
-    st.info("📝 暂无执行历史记录")
+        # 限制显示条数
+        executions = executions[:limit]
+        
+        if executions:
+            # 转换为DataFrame
+            history_data = []
+            for exec in executions:
+                # 状态显示
+                if exec.status == 'success':
+                    status_text = "✅ 成功"
+                    status_color = "#28a745"
+                elif exec.status == 'skipped':
+                    status_text = "⏭️ 已跳过"
+                    status_color = "#ffc107"
+                elif exec.status == 'failed':
+                    status_text = "❌ 失败"
+                    status_color = "#dc3545"
+                else:
+                    status_text = exec.status
+                    status_color = "#6c757d"
+                
+                # 构建详情信息
+                details = []
+                if exec.industry_sectors_count and exec.industry_sectors_count > 0:
+                    details.append(f"行业板块:{exec.industry_sectors_count}")
+                if exec.concept_sectors_count and exec.concept_sectors_count > 0:
+                    details.append(f"概念板块:{exec.concept_sectors_count}")
+                if exec.zt_pool_count and exec.zt_pool_count > 0:
+                    details.append(f"涨停:{exec.zt_pool_count}")
+                if exec.zbgc_pool_count and exec.zbgc_pool_count > 0:
+                    details.append(f"炸板:{exec.zbgc_pool_count}")
+                if exec.dtgc_pool_count and exec.dtgc_pool_count > 0:
+                    details.append(f"跌停:{exec.dtgc_pool_count}")
+                if exec.index_count and exec.index_count > 0:
+                    details.append(f"指数:{exec.index_count}")
+                
+                detail_text = ", ".join(details) if details else "-"
+                
+                # 执行耗时
+                duration_text = f"{exec.duration_seconds:.2f}秒" if exec.duration_seconds else "-"
+                
+                # 是否为交易日
+                trading_day_text = "是" if exec.is_trading_day else "否" if exec.is_trading_day is False else "-"
+                
+                history_data.append({
+                    "执行时间": exec.execution_time.strftime("%Y-%m-%d %H:%M:%S") if exec.execution_time else "-",
+                    "执行日期": exec.execution_date.strftime("%Y-%m-%d") if exec.execution_date else "-",
+                    "任务名称": exec.job_name,
+                    "状态": status_text,
+                    "耗时": duration_text,
+                    "数据条数": detail_text,
+                    "交易日": trading_day_text,
+                })
+            
+            history_df = pd.DataFrame(history_data)
+            
+            # 显示统计信息
+            total_count = len(executions)
+            success_count = len([e for e in executions if e.status == 'success'])
+            failed_count = len([e for e in executions if e.status == 'failed'])
+            skipped_count = len([e for e in executions if e.status == 'skipped'])
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("总执行次数", total_count)
+            with col2:
+                st.metric("成功", success_count, delta=f"{success_count/total_count*100:.1f}%" if total_count > 0 else None)
+            with col3:
+                st.metric("失败", failed_count, delta=f"{failed_count/total_count*100:.1f}%" if total_count > 0 else None, delta_color="inverse")
+            with col4:
+                st.metric("跳过", skipped_count, delta=f"{skipped_count/total_count*100:.1f}%" if total_count > 0 else None)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # 显示详细表格
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
+            
+            # 查看详细信息
+            st.markdown("#### 📋 详细信息")
+            selected_index = st.selectbox(
+                "选择要查看的记录",
+                options=range(len(executions)),
+                format_func=lambda x: f"{executions[x].execution_time.strftime('%Y-%m-%d %H:%M:%S')} - {executions[x].job_name} - {executions[x].status}" if executions[x].execution_time else f"记录 {x}",
+                help="选择一条记录查看详细信息"
+            )
+            
+            if selected_index is not None and selected_index < len(executions):
+                exec = executions[selected_index]
+                with st.expander(f"查看详细信息 - {exec.job_name}", expanded=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**基本信息**")
+                        st.write(f"- 任务ID: `{exec.job_id}`")
+                        st.write(f"- 任务名称: {exec.job_name}")
+                        st.write(f"- 执行日期: {exec.execution_date}")
+                        st.write(f"- 执行时间: {exec.execution_time.strftime('%Y-%m-%d %H:%M:%S') if exec.execution_time else '-'}")
+                        st.write(f"- 执行状态: {exec.status}")
+                        st.write(f"- 执行耗时: {exec.duration_seconds:.2f}秒" if exec.duration_seconds else "- 执行耗时: -")
+                        st.write(f"- 是否为交易日: {'是' if exec.is_trading_day else '否' if exec.is_trading_day is False else '-'}")
+                    
+                    with col2:
+                        st.markdown("**数据统计**")
+                        st.write(f"- 行业板块: {exec.industry_sectors_count or 0} 条")
+                        st.write(f"- 概念板块: {exec.concept_sectors_count or 0} 条")
+                        st.write(f"- 涨停股票: {exec.zt_pool_count or 0} 条")
+                        st.write(f"- 炸板股票: {exec.zbgc_pool_count or 0} 条")
+                        st.write(f"- 跌停股票: {exec.dtgc_pool_count or 0} 条")
+                        st.write(f"- 指数数据: {exec.index_count or 0} 条")
+                    
+                    if exec.notes:
+                        st.markdown("**备注**")
+                        st.write(exec.notes)
+                    
+                    if exec.error_message:
+                        st.markdown("**错误信息**")
+                        st.error(exec.error_message)
+                        if exec.error_traceback:
+                            with st.expander("查看错误堆栈"):
+                                st.code(exec.error_traceback, language='python')
+        else:
+            st.info(f"📝 在 {start_date} 至 {end_date} 期间暂无执行历史记录")
+            
+    except Exception as e:
+        st.error(f"❌ 查询执行历史失败: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+    finally:
+        db.close()
+except Exception as e:
+    st.error(f"❌ 数据库连接失败: {str(e)}")
+    st.info("💡 提示：请确保数据库配置正确且已初始化")
 
 # 调度器控制
 st.markdown("---")
