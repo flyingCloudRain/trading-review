@@ -13,11 +13,59 @@ class SectorService:
         获取同花顺行业一览表
         对应akshare接口: stock_board_industry_summary_ths
         """
-        try:
-            df = ak.stock_board_industry_summary_ths()
-            return cls._dataframe_to_dict_list(df)
-        except Exception as e:
-            raise Exception(f'Failed to get industry summary: {str(e)}')
+        import time
+        max_retries = 3
+        retry_delay = 2
+        
+        for retry in range(max_retries):
+            try:
+                df = ak.stock_board_industry_summary_ths()
+                
+                # 检查返回结果
+                if df is None:
+                    if retry < max_retries - 1:
+                        print(f"⚠️  API返回None，重试 {retry + 1}/{max_retries}...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        raise Exception('API返回None，无法获取行业板块数据')
+                
+                if df.empty:
+                    if retry < max_retries - 1:
+                        print(f"⚠️  API返回空数据，重试 {retry + 1}/{max_retries}...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        raise Exception('API返回空数据，无法获取行业板块数据')
+                
+                # 成功获取数据
+                return cls._dataframe_to_dict_list(df)
+                
+            except Exception as e:
+                error_msg = str(e)
+                # 检查是否是"No tables found"错误
+                if "No tables found" in error_msg or "no tables" in error_msg.lower():
+                    if retry < max_retries - 1:
+                        print(f"⚠️  检测到'No tables found'错误，重试 {retry + 1}/{max_retries}...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        raise Exception(f'API返回"No tables found"错误，可能是非交易时间或API接口问题: {str(e)}')
+                else:
+                    # 其他错误，如果是最后一次重试，则抛出异常
+                    if retry < max_retries - 1:
+                        print(f"⚠️  获取行业板块数据失败，重试 {retry + 1}/{max_retries}: {error_msg}")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2
+                        continue
+                    else:
+                        raise Exception(f'Failed to get industry summary after {max_retries} retries: {str(e)}')
+        
+        # 如果所有重试都失败
+        raise Exception('Failed to get industry summary: All retries exhausted')
     
     @classmethod
     def _dataframe_to_dict_list(cls, df: pd.DataFrame) -> List[Dict]:

@@ -243,13 +243,28 @@ else:
                                         
                                         db = SessionLocal()
                                         try:
-                                            # 1. 保存板块数据
+                                            # 1. 保存行业板块数据
                                             try:
-                                                saved_count = SectorHistoryService.save_today_sectors(db)
-                                                results['sectors'] = saved_count
+                                                industry_count = SectorHistoryService.save_today_sectors(db, sector_type='industry')
+                                                results['sectors'] = industry_count
                                                 excel_file = append_sectors_to_excel()
                                             except Exception as e:
                                                 results['sectors'] = f"失败: {str(e)}"
+                                            
+                                            # 1.1 保存概念板块数据
+                                            try:
+                                                concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
+                                                if 'sectors' in results and isinstance(results['sectors'], int):
+                                                    results['sectors'] = f"行业:{results['sectors']}, 概念:{concept_count}"
+                                                elif 'sectors' in results:
+                                                    results['sectors'] = f"{results['sectors']}, 概念:{concept_count}"
+                                                else:
+                                                    results['sectors'] = f"概念:{concept_count}"
+                                            except Exception as e:
+                                                if 'sectors' in results:
+                                                    results['sectors'] = f"{results['sectors']}, 概念失败: {str(e)}"
+                                                else:
+                                                    results['sectors'] = f"概念失败: {str(e)}"
                                             
                                             # 2. 保存涨停股票池数据
                                             try:
