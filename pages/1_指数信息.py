@@ -446,18 +446,59 @@ try:
     # 完整数据表格
     st.markdown('<h2 class="section-header">📋 完整数据</h2>', unsafe_allow_html=True)
     
-    # 显示数据表格（显示全部数据，不限制高度）
-    st.dataframe(df_display, use_container_width=True)
-    
-    # 下载按钮
-    csv = df_display.to_csv(index=False).encode('utf-8-sig')
-    st.download_button(
-        label="📥 下载CSV",
-        data=csv,
-        file_name="指数信息.csv",
-        mime="text/csv",
-        key="download_index"
+    # 搜索功能
+    search_term = st.text_input(
+        "🔍 搜索指数",
+        placeholder="输入指数名称或代码进行搜索...",
+        help="支持搜索指数名称或代码，支持模糊匹配",
+        key="search_index_data"
     )
+    
+    # 根据搜索词过滤数据
+    df_filtered = df_display.copy()
+    if search_term:
+        search_term_lower = search_term.lower().strip()
+        # 创建搜索掩码：匹配指数名称（指数代码）列
+        if '指数名称（指数代码）' in df_filtered.columns:
+            mask = df_filtered['指数名称（指数代码）'].astype(str).str.lower().str.contains(
+                search_term_lower, na=False
+            )
+        else:
+            # 如果没有合并列，尝试搜索所有文本列
+            mask = pd.Series([False] * len(df_filtered))
+            for col in df_filtered.columns:
+                if df_filtered[col].dtype == 'object':  # 文本列
+                    mask = mask | df_filtered[col].astype(str).str.lower().str.contains(
+                        search_term_lower, na=False
+                    )
+        
+        df_filtered = df_filtered[mask].copy()
+        
+        # 显示搜索结果统计
+        if len(df_filtered) > 0:
+            st.info(f"🔍 找到 {len(df_filtered)} 条匹配结果（共 {len(df_display)} 条数据）")
+        else:
+            st.warning(f"⚠️ 未找到包含 '{search_term}' 的指数数据")
+    
+    # 显示数据表格（显示过滤后的数据，不限制高度）
+    if len(df_filtered) > 0:
+        st.dataframe(df_filtered, use_container_width=True)
+        
+        # 下载按钮（下载过滤后的数据）
+        csv = df_filtered.to_csv(index=False).encode('utf-8-sig')
+        file_name = f"指数信息_{search_term.replace(' ', '_')}.csv" if search_term else "指数信息.csv"
+        st.download_button(
+            label="📥 下载CSV" + (f"（{len(df_filtered)}条）" if search_term else ""),
+            data=csv,
+            file_name=file_name,
+            mime="text/csv",
+            key="download_index"
+        )
+    else:
+        if search_term:
+            st.info("💡 请尝试使用其他关键词搜索，或清空搜索框查看全部数据")
+        else:
+            st.info("📭 暂无数据")
 
 except Exception as e:
     st.error(f"❌ 加载数据失败: {str(e)}")
