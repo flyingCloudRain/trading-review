@@ -122,12 +122,36 @@ def get_last_trading_day() -> date:
 def get_data_date() -> date:
     """
     获取应该使用的数据日期
-    - 如果在交易时间内，使用当前日期
-    - 如果不在交易时间内，使用上一个交易日
-    :return: 应该使用的数据日期
+    - 如果今天是交易日，使用今天
+    - 如果今天不是交易日，使用上一个交易日
+    
+    :return: 应该使用的数据日期（当前交易日或上一个交易日）
     """
-    if is_trading_time():
-        return get_utc8_date()
-    else:
+    today = get_utc8_date()
+    
+    # 检查今天是否为交易日
+    try:
+        import akshare as ak
+        import pandas as pd
+        
+        # 获取交易日历
+        trade_dates = ak.tool_trade_date_hist_sina()
+        if trade_dates is not None and not trade_dates.empty:
+            # 将日期列转换为date对象
+            trade_dates['date'] = pd.to_datetime(trade_dates['trade_date']).dt.date
+            # 检查今天是否在交易日列表中
+            is_trading = today in trade_dates['date'].tolist()
+            
+            if is_trading:
+                # 今天是交易日，使用今天
+                return today
+            else:
+                # 今天不是交易日，使用上一个交易日
+                return get_last_trading_day()
+        else:
+            # 无法获取交易日历，使用上一个交易日（保守策略）
+            return get_last_trading_day()
+    except Exception:
+        # 如果出错，使用上一个交易日（保守策略）
         return get_last_trading_day()
 
