@@ -272,6 +272,19 @@ try:
     # 计算重点指数总数
     index_total = len(focused_indices_data) if focused_indices_data else 0
     
+    # 如果指数数据为空，显示提示信息（但不阻止页面继续显示其他数据）
+    if not indices:
+        st.warning(f"⚠️ {data_date} 暂无指数数据")
+        # 检查是否为交易日
+        from tasks.sector_scheduler import SectorScheduler
+        scheduler = SectorScheduler()
+        is_trading = scheduler._is_trading_day(data_date)
+        
+        if is_trading:
+            st.info("💡 提示：指数数据会在交易日15:10自动保存到数据库。如果数据应该存在但显示为空，可以：\n1. 前往「定时任务管理」页面手动执行任务\n2. 点击「🔄 清除缓存」按钮清除缓存后重试")
+        else:
+            st.info("💡 提示：该日期不是交易日，无法获取指数数据。请选择其他交易日查看数据。")
+    
     # 获取主要指数数据（上证指数、深证指数、创业板指）
     main_indices = {}
     main_index_codes = {
@@ -782,32 +795,32 @@ try:
         if len(concept_sectors) > 0:
             df_concept = pd.DataFrame(concept_sectors)
             
-                col1, col2 = st.columns(2)
-                
-                with col1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
                 # 涨幅TOP 10
                 top_up = df_concept.nlargest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_up.empty:
                     fig_up = px.bar(
                         top_up,
-                            x='changePercent',
+                        x='changePercent',
                         y='name',
-                            orientation='h',
-                            color='changePercent',
-                            color_continuous_scale='Reds',
+                        orientation='h',
+                        color='changePercent',
+                        color_continuous_scale='Reds',
                         title='📈 概念板块涨幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
-                        )
+                    )
                     fig_up.update_layout(
-                            yaxis={'categoryorder': 'total ascending'},
-                            height=400,
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            showlegend=False
-                        )
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=400,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False
+                    )
                     st.plotly_chart(fig_up, use_container_width=True)
-                
-                with col2:
+            
+            with col2:
                 # 跌幅TOP 10
                 top_down = df_concept.nsmallest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_down.empty:
@@ -818,21 +831,21 @@ try:
                     
                     fig_down = px.bar(
                         top_down_sorted,
-                            x='changePercent',
+                        x='changePercent',
                         y='name',
-                            orientation='h',
-                            color='changePercent',
-                            color_continuous_scale='Greens',
+                        orientation='h',
+                        color='changePercent',
+                        color_continuous_scale='Greens',
                         title='📉 概念板块跌幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
-                        )
+                    )
                     fig_down.update_layout(
-                            yaxis={'categoryorder': 'total ascending'},
-                            height=400,
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            showlegend=False
-                        )
+                        yaxis={'categoryorder': 'total ascending'},
+                        height=400,
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False
+                    )
                     st.plotly_chart(fig_down, use_container_width=True)
             
             # 资金净流入TOP 10
@@ -894,23 +907,23 @@ try:
     st.markdown('<h2 class="section-header">📊 股票池统计</h2>', unsafe_allow_html=True)
     # 显示KPI卡片（统计数据已在市场概况部分计算）
     col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
+    
+    with col1:
+        st.metric(
             "📈 涨停股票",
             f"{zt_count}",
             help="所选日期的涨停股票数量"
-            )
-        
-        with col2:
-            st.metric(
+        )
+    
+    with col2:
+        st.metric(
             "📉 跌停股票",
             f"{dt_count}",
             help="所选日期的跌停股票数量"
-            )
-        
-        with col3:
-            st.metric(
+        )
+    
+    with col3:
+        st.metric(
             "💥 炸板股票",
             f"{zb_count}",
             help="所选日期的炸板股票数量"
@@ -945,8 +958,8 @@ try:
             )
     
     col1, col2, col3 = st.columns(3)
-            
-            with col1:
+    
+    with col1:
         if zt_pool:
             df_zt = pd.DataFrame(zt_pool)
             # 连板数统计
@@ -1009,8 +1022,8 @@ try:
                     st.plotly_chart(fig_industry, use_container_width=True)
         else:
             st.info("📈 暂无涨停股票数据")
-            
-            with col2:
+    
+    with col2:
         if dt_pool:
             df_dt = pd.DataFrame(dt_pool)
             # 连续跌停数统计
