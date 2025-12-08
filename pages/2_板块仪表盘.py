@@ -38,7 +38,7 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -47,7 +47,7 @@ st.markdown("""
     }
     /* 统一二级标题样式 - 无背景色 */
     .section-header {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #2c3e50;
         margin-top: 2rem;
@@ -469,18 +469,58 @@ if 'totalVolume' in df_selected_date.columns and 'totalAmount' in df_selected_da
 # 数据表格 - 显示选择日期的全部数据
 st.markdown('<h2 class="section-header">📋 完整数据</h2>', unsafe_allow_html=True)
 
-# 重新加载选择日期的全部数据（不进行板块过滤）
-df_all_data = load_sector_data_by_date(selected_date)
+# 板块类型筛选（在完整数据部分）
+col_filter1, col_filter2 = st.columns([1, 3])
+with col_filter1:
+    filter_sector_type = st.selectbox(
+        "筛选板块类型",
+        options=['all', 'industry', 'concept'],
+        format_func=lambda x: {
+            'all': '全部',
+            'industry': '🏭 行业板块',
+            'concept': '💡 概念板块'
+        }.get(x, x),
+        help="选择要显示的板块类型",
+        key="filter_sector_type_full_data"
+    )
 
-# 添加搜索框 - 根据板块名称查询
-search_name = st.text_input(
-    "🔍 搜索板块名称",
-    value="",
-    help="输入板块名称进行搜索，支持模糊匹配",
-    key="sector_search"
-)
+with col_filter2:
+    # 添加搜索框 - 根据板块名称查询
+    search_name = st.text_input(
+        "🔍 搜索板块名称",
+        value="",
+        help="输入板块名称进行搜索，支持模糊匹配",
+        key="sector_search"
+    )
 
-# 准备显示的数据（使用选择日期的全部数据）
+# 根据筛选条件加载数据
+if filter_sector_type == 'all':
+    # 加载所有板块类型的数据
+    df_industry = load_sector_data_by_date(selected_date, 'industry')
+    df_concept = load_sector_data_by_date(selected_date, 'concept')
+    
+    # 合并数据并添加板块类型标识
+    if not df_industry.empty:
+        df_industry['sectorType'] = '行业板块'
+    if not df_concept.empty:
+        df_concept['sectorType'] = '概念板块'
+    
+    # 合并数据
+    if not df_industry.empty and not df_concept.empty:
+        df_all_data = pd.concat([df_industry, df_concept], ignore_index=True)
+    elif not df_industry.empty:
+        df_all_data = df_industry
+    elif not df_concept.empty:
+        df_all_data = df_concept
+    else:
+        df_all_data = pd.DataFrame()
+else:
+    # 加载指定板块类型的数据
+    df_all_data = load_sector_data_by_date(selected_date, filter_sector_type)
+    if not df_all_data.empty:
+        df_all_data['sectorType'] = '行业板块' if filter_sector_type == 'industry' else '概念板块'
+
+# 准备显示的数据
 df_display = df_all_data.copy()
 
 # 根据搜索关键词过滤数据
@@ -508,6 +548,7 @@ if columns_to_drop:
 # 列名映射：英文转中文
 column_mapping = {
     'date': '日期',
+    'sectorType': '板块类型',
     'name': '板块名称',
     'changePercent': '涨跌幅(%)',
     'totalVolume': '总成交量(万手)',
@@ -522,6 +563,18 @@ column_mapping = {
 }
 # 重命名列（只重命名存在的列）
 df_display = df_display.rename(columns={k: v for k, v in column_mapping.items() if k in df_display.columns})
+
+# 调整列顺序：如果有板块类型列，将其放在最前面（在日期之后）
+if '板块类型' in df_display.columns:
+    cols = []
+    if '日期' in df_display.columns:
+        cols.append('日期')
+    cols.append('板块类型')
+    # 添加其他列（排除已添加的列）
+    for col in df_display.columns:
+        if col not in cols:
+            cols.append(col)
+    df_display = df_display[cols]
 
 st.dataframe(df_display, use_container_width=True, height=400)
 
