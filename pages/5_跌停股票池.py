@@ -277,7 +277,15 @@ try:
             
             with col2:
                 # 连续跌停TOP 10
-                top_limit_down = df.nlargest(10, 'continuousLimitDown')[['code', 'name', 'continuousLimitDown', 'changePercent']]
+                top_limit_down = df.nlargest(10, 'continuousLimitDown')[['code', 'name', 'continuousLimitDown', 'changePercent']].copy()
+                # 转换为中文列名
+                col_mapping = {
+                    'code': '代码',
+                    'name': '名称',
+                    'continuousLimitDown': '连续跌停',
+                    'changePercent': '涨跌幅(%)'
+                }
+                top_limit_down = top_limit_down.rename(columns=col_mapping)
                 st.dataframe(top_limit_down, use_container_width=True)
         
         # 开板次数统计
@@ -302,19 +310,43 @@ try:
             
             with col2:
                 # 开板次数TOP 10
-                top_open = df.nlargest(10, 'openCount')[['code', 'name', 'openCount', 'changePercent']]
+                top_open = df.nlargest(10, 'openCount')[['code', 'name', 'openCount', 'changePercent']].copy()
+                # 转换为中文列名
+                col_mapping = {
+                    'code': '代码',
+                    'name': '名称',
+                    'openCount': '开板次数',
+                    'changePercent': '涨跌幅(%)'
+                }
+                top_open = top_open.rename(columns=col_mapping)
                 st.dataframe(top_open, use_container_width=True)
         
         # 封单资金统计
         if 'sealingFunds' in df.columns:
             st.markdown("#### 💵 封单资金TOP 10")
-            top_sealing = df.nlargest(10, 'sealingFunds')[['code', 'name', 'sealingFunds', 'changePercent']]
+            top_sealing = df.nlargest(10, 'sealingFunds')[['code', 'name', 'sealingFunds', 'changePercent']].copy()
+            # 转换为中文列名
+            col_mapping = {
+                'code': '代码',
+                'name': '名称',
+                'sealingFunds': '封单资金(亿元)',
+                'changePercent': '涨跌幅(%)'
+            }
+            top_sealing = top_sealing.rename(columns=col_mapping)
             st.dataframe(top_sealing, use_container_width=True)
         
         # 成交额TOP 10
         if 'turnover' in df.columns:
             st.markdown("#### 💰 成交额TOP 10")
-            top_turnover = df.nlargest(10, 'turnover')[['code', 'name', 'turnover', 'changePercent']]
+            top_turnover = df.nlargest(10, 'turnover')[['code', 'name', 'turnover', 'changePercent']].copy()
+            # 转换为中文列名
+            col_mapping = {
+                'code': '代码',
+                'name': '名称',
+                'turnover': '成交额(亿元)',
+                'changePercent': '涨跌幅(%)'
+            }
+            top_turnover = top_turnover.rename(columns=col_mapping)
             st.dataframe(top_turnover, use_container_width=True)
         
         # 行业分布

@@ -444,7 +444,16 @@ try:
                         continuous_stocks = continuous_stocks.sort_values('continuousBoards', ascending=False)
                         display_cols = ['code', 'name', 'continuousBoards', 'changePercent']
                         available_cols = [col for col in display_cols if col in continuous_stocks.columns]
-                        st.dataframe(continuous_stocks[available_cols], use_container_width=True)
+                        # 转换为中文列名
+                        continuous_display = continuous_stocks[available_cols].copy()
+                        col_mapping = {
+                            'code': '代码',
+                            'name': '名称',
+                            'continuousBoards': '连板数',
+                            'changePercent': '涨跌幅(%)'
+                        }
+                        continuous_display = continuous_display.rename(columns={k: v for k, v in col_mapping.items() if k in continuous_display.columns})
+                        st.dataframe(continuous_display, use_container_width=True)
                     else:
                         st.info("暂无连板股票（连板数>1）")
                 else:

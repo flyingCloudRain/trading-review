@@ -277,7 +277,15 @@ try:
             
             with col2:
                 # 炸板次数TOP 10
-                top_explosions = df.nlargest(10, 'explosionCount')[['code', 'name', 'explosionCount', 'changePercent']]
+                top_explosions = df.nlargest(10, 'explosionCount')[['code', 'name', 'explosionCount', 'changePercent']].copy()
+                # 转换为中文列名
+                col_mapping = {
+                    'code': '代码',
+                    'name': '名称',
+                    'explosionCount': '炸板次数',
+                    'changePercent': '涨跌幅(%)'
+                }
+                top_explosions = top_explosions.rename(columns=col_mapping)
                 st.dataframe(top_explosions, use_container_width=True)
         
         # 涨跌幅分布
@@ -298,13 +306,29 @@ try:
             
             with col2:
                 # 涨跌幅TOP 10
-                top_changes = df.nlargest(10, 'changePercent')[['code', 'name', 'changePercent', 'explosionCount']]
+                top_changes = df.nlargest(10, 'changePercent')[['code', 'name', 'changePercent', 'explosionCount']].copy()
+                # 转换为中文列名
+                col_mapping = {
+                    'code': '代码',
+                    'name': '名称',
+                    'changePercent': '涨跌幅(%)',
+                    'explosionCount': '炸板次数'
+                }
+                top_changes = top_changes.rename(columns=col_mapping)
                 st.dataframe(top_changes, use_container_width=True)
         
         # 成交额TOP 10
         if 'turnover' in df.columns:
             st.markdown("#### 💰 成交额TOP 10")
-            top_turnover = df.nlargest(10, 'turnover')[['code', 'name', 'turnover', 'changePercent']]
+            top_turnover = df.nlargest(10, 'turnover')[['code', 'name', 'turnover', 'changePercent']].copy()
+            # 转换为中文列名
+            col_mapping = {
+                'code': '代码',
+                'name': '名称',
+                'turnover': '成交额(亿元)',
+                'changePercent': '涨跌幅(%)'
+            }
+            top_turnover = top_turnover.rename(columns=col_mapping)
             st.dataframe(top_turnover, use_container_width=True)
         
         # 行业分布
