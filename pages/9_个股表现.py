@@ -428,6 +428,11 @@ if stock_code:
         df_chart = df_fund.head(selected_days).copy()
         df_chart = df_chart.sort_values('日期', ascending=True)
         
+        # 过滤非交易日（如果日期列存在）
+        if '日期' in df_chart.columns:
+            from utils.time_utils import filter_trading_days
+            df_chart = filter_trading_days(df_chart, date_column='日期')
+        
         # 主力净流入趋势
         fig_main = go.Figure()
         
