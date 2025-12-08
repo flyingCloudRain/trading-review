@@ -55,6 +55,16 @@ def create_sector_trend_chart(
     if filtered_df.empty:
         return go.Figure()
     
+    # filter_trading_days 会将date列转换为date对象，需要重新转换为datetime才能使用.dt访问器
+    if not pd.api.types.is_datetime64_any_dtype(filtered_df[date_col]):
+        filtered_df[date_col] = pd.to_datetime(filtered_df[date_col])
+    
+    # 排序数据
+    filtered_df = filtered_df.sort_values([date_col, 'name'])
+    
+    # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
+    filtered_df['date_str'] = filtered_df[date_col].dt.strftime('%Y-%m-%d')
+    
     # 根据value_col设置不同的标签
     y_label_map = {
         'changePercent': '涨跌幅(%)',
@@ -74,20 +84,33 @@ def create_sector_trend_chart(
     for i, sector in enumerate(unique_sectors):
         color_map[sector] = MULTI_LINE_COLORS[i % len(MULTI_LINE_COLORS)]
     
-    fig = px.line(
-        filtered_df,
-        x=date_col,
-        y=value_col,
-        color='name',
-        title=title,
-        labels={
-            date_col: '日期',
-            value_col: y_label,
-            'name': '板块'
-        },
-        markers=True,
-        color_discrete_map=color_map  # 使用自定义颜色映射
-    )
+    # 使用 go.Figure 和 go.Scatter 来创建图表，以便更好地控制 X 轴
+    fig = go.Figure()
+    
+    # 为每个板块添加一条折线
+    for sector in unique_sectors:
+        sector_data = filtered_df[filtered_df['name'] == sector].copy()
+        if not sector_data.empty:
+            fig.add_trace(go.Scatter(
+                x=sector_data['date_str'],
+                y=sector_data[value_col],
+                mode='lines+markers',
+                name=sector,
+                line=dict(
+                    color=color_map[sector],
+                    width=LINE_CHART_CONFIG.get('line_width', 2),
+                    shape='spline'  # 平滑曲线
+                ),
+                marker=dict(
+                    color=color_map[sector],
+                    size=LINE_CHART_CONFIG.get('marker_size', 5),
+                    line=dict(
+                        width=LINE_CHART_CONFIG.get('marker_line_width', 1),
+                        color=LINE_CHART_CONFIG.get('marker_line_color', 'white')
+                    )
+                ),
+                hovertemplate=f'<b>{sector}</b><br>日期: %{{x}}<br>{y_label}: %{{y:.2f}}<extra></extra>'
+            ))
     
     # 添加零线 - 优化样式
     fig.add_hline(
@@ -128,7 +151,9 @@ def create_sector_trend_chart(
             showgrid=True,
             tickfont=dict(size=11, color='#6b7280'),
             linecolor='rgba(128, 128, 128, 0.3)',
-            linewidth=1
+            linewidth=1,
+            type='category',  # 使用分类类型，避免非交易日空白
+            tickangle=-45  # 倾斜角度，避免日期重叠
         ),
         yaxis=dict(
             title=dict(

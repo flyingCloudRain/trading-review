@@ -136,29 +136,15 @@ with tab1:
             available_sectors = [s for s in all_sectors if s not in focused_sectors]
             
             if available_sectors:
-                # 搜索可用板块
-                search_available = st.text_input(
-                    "🔍 搜索可用板块",
-                    placeholder="输入板块名称...",
-                    key="search_available_sectors",
-                    help="快速查找要添加的板块"
-                )
+                col_add1, col_add2, col_add3 = st.columns([3, 1, 1])
                 
-                if search_available:
-                    filtered_available = [s for s in available_sectors if search_available.lower() in s.lower()]
-                else:
-                    filtered_available = available_sectors
-                
-                if filtered_available:
-                    col_add1, col_add2, col_add3 = st.columns([3, 1, 1])
-                    
-                    with col_add1:
-                        selected_sector = st.selectbox(
-                            "选择要添加的板块",
-                            options=filtered_available,
-                            help=f"共 {len(filtered_available)} 个可用板块（已过滤 {len(available_sectors) - len(filtered_available)} 个）",
-                            key="select_sector"
-                        )
+                with col_add1:
+                    selected_sector = st.selectbox(
+                        "选择要添加的板块",
+                        options=available_sectors,
+                        help=f"💡 共 {len(available_sectors)} 个可用板块，请从下拉列表中选择要添加的板块",
+                        key="select_sector"
+                    )
                     
                     with col_add2:
                         if st.button("➕ 添加", use_container_width=True, type="primary", key="add_sector"):
@@ -176,7 +162,7 @@ with tab1:
                     with st.expander("📦 批量添加板块", expanded=False):
                         multi_selected = st.multiselect(
                             "选择要批量添加的板块（可多选）",
-                            options=filtered_available,
+                            options=available_sectors,
                             help="选择多个板块后，点击批量添加按钮",
                             key="multi_select_sectors"
                         )
@@ -192,8 +178,6 @@ with tab1:
                                     st.rerun()
                                 else:
                                     st.error("❌ 批量添加失败")
-                else:
-                    st.info(f"未找到包含 '{search_available}' 的可用板块")
             else:
                 st.info("✨ 所有可用板块都已经是重点关注板块了")
         else:
