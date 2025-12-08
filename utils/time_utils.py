@@ -80,9 +80,12 @@ def is_trading_time() -> bool:
 
 def get_last_trading_day() -> date:
     """
-    获取上一个交易日（使用akshare交易日历）
+    获取上一个交易日（使用akshare交易日历，基于北京时间UTC+8）
     注意：如果当前不在交易时间内，返回小于今天的最大交易日
-    :return: 上一个交易日的date对象
+    
+    注意：所有日期判断均基于北京时间（UTC+8），确保交易日判断的准确性
+    
+    :return: 上一个交易日的date对象（基于北京时间）
     """
     try:
         import akshare as ak
@@ -98,8 +101,8 @@ def get_last_trading_day() -> date:
             # 按日期降序排序
             trade_dates = trade_dates.sort_values('date', ascending=False)
             
-            # 获取当前日期
-            today = get_utc8_date()
+            # 获取当前日期（北京时间）
+            today = get_utc8_date()  # 北京时间当前日期
             
             # 找到小于今天的最大交易日（不包括今天）
             last_trading_day = None
@@ -121,13 +124,15 @@ def get_last_trading_day() -> date:
 
 def get_data_date() -> date:
     """
-    获取应该使用的数据日期
-    - 如果今天是交易日，使用今天
+    获取应该使用的数据日期（基于北京时间UTC+8）
+    - 如果今天是交易日（按北京时间判断），使用今天
     - 如果今天不是交易日，使用上一个交易日
     
-    :return: 应该使用的数据日期（当前交易日或上一个交易日）
+    注意：所有日期判断均基于北京时间（UTC+8），确保交易日判断的准确性
+    
+    :return: 应该使用的数据日期（当前交易日或上一个交易日，基于北京时间）
     """
-    today = get_utc8_date()
+    today = get_utc8_date()  # 获取北京时间当前日期
     
     # 检查今天是否为交易日
     try:

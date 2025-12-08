@@ -68,7 +68,15 @@ class SectorScheduler:
         logger.info("  - 每日15:10（北京时间）获取即时资金流数据（概念板块）")
     
     def _is_trading_day(self, target_date: date) -> bool:
-        """检查是否为交易日"""
+        """
+        检查是否为交易日（基于北京时间UTC+8）
+        
+        注意：target_date 应该是基于北京时间的日期对象
+        所有交易日判断均基于北京时间（UTC+8），确保交易日判断的准确性
+        
+        :param target_date: 要检查的日期（基于北京时间）
+        :return: True表示是交易日，False表示不是交易日
+        """
         try:
             # 使用 akshare 获取交易日历
             trade_dates = ak.tool_trade_date_hist_sina()
@@ -83,7 +91,7 @@ class SectorScheduler:
                 trade_date_list = trade_dates['date_str'].tolist()
                 
                 is_trading = date_str in trade_date_list
-                logger.debug(f"检查日期 {target_date} ({date_str}) 是否为交易日: {is_trading}")
+                logger.debug(f"检查日期 {target_date} ({date_str}) 是否为交易日（基于北京时间）: {is_trading}")
                 return is_trading
             else:
                 logger.warning("无法获取交易日历数据，默认认为是交易日")
@@ -129,10 +137,10 @@ class SectorScheduler:
             logger.info("=" * 60)
             logger.info("开始执行每日数据保存任务（保存到 Supabase 数据库）...")
             
-            # 检查是否为交易日
+            # 检查是否为交易日（基于北京时间判断）
             if not is_trading:
-                logger.info(f"今日 ({today}) 不是交易日，跳过数据保存")
-                logger.info(f"上一个交易日: {data_date}")
+                logger.info(f"今日 ({today}，北京时间) 不是交易日，跳过数据保存")
+                logger.info(f"上一个交易日（北京时间）: {data_date}")
                 status = 'skipped'
                 # 记录跳过执行
                 db = SessionLocal()
