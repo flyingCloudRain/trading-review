@@ -75,7 +75,7 @@ if not DB_AVAILABLE:
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -84,7 +84,7 @@ st.markdown("""
     }
     /* 统一二级标题样式 - 无背景色 */
     .section-header {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #2c3e50;
         margin-top: 2rem;
@@ -130,27 +130,8 @@ try:
         scheduler = SectorScheduler()
         is_trading = scheduler._is_trading_day(selected_date)
         
-        if is_trading:
-            st.info("💡 提示：指数数据会在交易日15:10自动保存到数据库。如果数据应该存在但显示为空，可以：\n1. 前往「定时任务管理」页面手动执行任务\n2. 点击「🔄 清除缓存」按钮清除缓存后重试")
-        else:
+        if not is_trading:
             st.info("💡 提示：该日期不是交易日，无法获取指数数据。请选择其他交易日查看数据。")
-        
-        # 提供操作按钮
-        st.markdown("---")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 清除缓存", use_container_width=True, key="clear_cache_index"):
-                # 清除缓存（如果有的话）
-                st.success("✅ 缓存已清除，请刷新页面")
-                st.rerun()
-        with col2:
-            st.markdown("""
-            <a href="/定时任务管理" target="_self">
-                <button style="width: 100%; padding: 0.5rem; background-color: #1f77b4; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    ⏰ 前往定时任务管理
-                </button>
-            </a>
-            """, unsafe_allow_html=True)
         
         st.stop()
     
@@ -580,7 +561,7 @@ try:
             file_name=file_name,
             mime="text/csv",
             key="download_index"
-    )
+        )
     else:
         if search_term:
             st.info("💡 请尝试使用其他关键词搜索，或清空搜索框查看全部数据")

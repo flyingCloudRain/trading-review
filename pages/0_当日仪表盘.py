@@ -214,28 +214,8 @@ try:
             if not is_trading:
                 st.info("💡 今天不是交易日，无法获取实时数据。请选择其他日期查看历史数据。")
         else:
-            if is_trading:
-                st.info("💡 该日期是交易日，但数据库中没有数据。可能原因：\n1. 定时任务还未执行\n2. 数据获取失败\n\n建议：前往「定时任务管理」页面手动执行任务获取数据")
-            else:
+            if not is_trading:
                 st.info("💡 该日期不是交易日，无法获取数据。请选择其他交易日查看数据。")
-        
-        
-        # 提供操作按钮
-        st.markdown("---")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 清除缓存", use_container_width=True, key="clear_cache_btn"):
-                load_daily_data.clear()
-                st.success("✅ 缓存已清除，请刷新页面")
-                st.rerun()
-        with col2:
-            st.markdown("""
-            <a href="/定时任务管理" target="_self">
-                <button style="width: 100%; padding: 0.5rem; background-color: #1f77b4; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                    ⏰ 前往定时任务管理
-                </button>
-            </a>
-            """, unsafe_allow_html=True)
         
         st.stop()
     
@@ -277,9 +257,7 @@ try:
         scheduler = SectorScheduler()
         is_trading = scheduler._is_trading_day(data_date)
         
-        if is_trading:
-            st.info("💡 提示：指数数据会在交易日15:10自动保存到数据库。如果数据应该存在但显示为空，可以：\n1. 前往「定时任务管理」页面手动执行任务\n2. 点击「🔄 清除缓存」按钮清除缓存后重试")
-        else:
+        if not is_trading:
             st.info("💡 提示：该日期不是交易日，无法获取指数数据。请选择其他交易日查看数据。")
     
     # 获取主要指数数据（上证指数、深证指数、创业板指）
