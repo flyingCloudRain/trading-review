@@ -183,63 +183,68 @@ try:
                         else:
                             daily_count = daily_count.sort_values('date')
                             
+                            # 确保date列是datetime类型，然后转换为字符串格式，用于X轴显示（避免非交易日空白）
+                            if not pd.api.types.is_datetime64_any_dtype(daily_count['date']):
+                                daily_count['date'] = pd.to_datetime(daily_count['date'])
+                            daily_count['date_str'] = daily_count['date'].dt.strftime('%Y-%m-%d')
+                            
                             # 创建折线图 - 使用统一配置
                             from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
                             
                             fig_trend = go.Figure()
-                        
-                        # 主折线
-                        fig_trend.add_trace(go.Scatter(
-                            x=daily_count['date'],
-                            y=daily_count['炸板股票数'],
-                            mode='lines+markers',
-                            name='炸板股票数',
-                            line=dict(
-                                color=LINE_CHART_COLORS['warning'],
-                                width=LINE_CHART_CONFIG['line_width'],
-                                shape='spline'  # 平滑曲线
-                            ),
-                            marker=dict(
-                                color=LINE_CHART_COLORS['warning'],
-                                size=LINE_CHART_CONFIG['marker_size'],
+                            
+                            # 主折线 - 使用日期字符串作为X轴，确保数据点连续无空白
+                            fig_trend.add_trace(go.Scatter(
+                                x=daily_count['date_str'],
+                                y=daily_count['炸板股票数'],
+                                mode='lines+markers',
+                                name='炸板股票数',
                                 line=dict(
-                                    width=LINE_CHART_CONFIG['marker_line_width'],
-                                    color=LINE_CHART_CONFIG['marker_line_color']
-                                )
-                            ),
-                            fill='tozeroy',  # 填充到零线
-                            fillcolor=f"rgba(245, 158, 11, {LINE_CHART_CONFIG['fill_opacity']})"  # 橙色填充
-                        ))
-                        
-                        # 添加平均值线
-                        avg_count = daily_count['炸板股票数'].mean()
-                        fig_trend.add_hline(
-                            y=avg_count,
-                            line_dash="dash",
-                            line_color="#64748b",
-                            opacity=0.7,
-                            line_width=2,
-                            annotation_text=f"平均值: {avg_count:.1f}",
-                            annotation_position="right",
-                            annotation_font_size=12,
-                            annotation_bgcolor="rgba(100, 116, 139, 0.1)"
-                        )
-                        
-                        fig_trend.update_layout(
-                            title=dict(
-                                text="最近2周每日炸板股票总数趋势",
-                                font=dict(size=LINE_CHART_CONFIG['title_font_size']),
-                                x=0.5,
-                                xanchor='center'
-                            ),
-                            xaxis=dict(
-                                title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
-                                tickformat='%Y-%m-%d',
-                                dtick='D1',
-                                gridcolor=LINE_CHART_CONFIG['grid_color'],
-                                gridwidth=LINE_CHART_CONFIG['grid_width'],
-                                showgrid=True
-                            ),
+                                    color=LINE_CHART_COLORS['warning'],
+                                    width=LINE_CHART_CONFIG['line_width'],
+                                    shape='spline'  # 平滑曲线
+                                ),
+                                marker=dict(
+                                    color=LINE_CHART_COLORS['warning'],
+                                    size=LINE_CHART_CONFIG['marker_size'],
+                                    line=dict(
+                                        width=LINE_CHART_CONFIG['marker_line_width'],
+                                        color=LINE_CHART_CONFIG['marker_line_color']
+                                    )
+                                ),
+                                fill='tozeroy',  # 填充到零线
+                                fillcolor=f"rgba(245, 158, 11, {LINE_CHART_CONFIG['fill_opacity']})"  # 橙色填充
+                            ))
+                            
+                            # 添加平均值线
+                            avg_count = daily_count['炸板股票数'].mean()
+                            fig_trend.add_hline(
+                                y=avg_count,
+                                line_dash="dash",
+                                line_color="#64748b",
+                                opacity=0.7,
+                                line_width=2,
+                                annotation_text=f"平均值: {avg_count:.1f}",
+                                annotation_position="right",
+                                annotation_font_size=12,
+                                annotation_bgcolor="rgba(100, 116, 139, 0.1)"
+                            )
+                            
+                            # X轴使用类别模式，只显示交易日，数据点连续无空白
+                            fig_trend.update_layout(
+                                title=dict(
+                                    text="最近2周每日炸板股票总数趋势",
+                                    font=dict(size=LINE_CHART_CONFIG['title_font_size']),
+                                    x=0.5,
+                                    xanchor='center'
+                                ),
+                                xaxis=dict(
+                                    type='category',  # 使用类别轴，避免非交易日空白
+                                    title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
+                                    gridcolor=LINE_CHART_CONFIG['grid_color'],
+                                    gridwidth=LINE_CHART_CONFIG['grid_width'],
+                                    showgrid=True
+                                ),
                             yaxis=dict(
                                 title=dict(text="炸板股票数", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
                                 gridcolor=LINE_CHART_CONFIG['grid_color'],
