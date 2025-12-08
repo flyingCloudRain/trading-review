@@ -13,12 +13,19 @@ logger = logging.getLogger(__name__)
 
 # 创建数据库引擎（强制使用Supabase PostgreSQL）
 try:
-    # 优先使用连接池（可以避免 IPv6 问题）
-    # 如果连接池失败，会自动回退到标准连接
+    # 优先使用连接池 URI 或完整 URI（可以避免 IPv6 问题）
+    # 如果失败，会自动回退到标准连接
     try:
         database_url = SupabaseConfig.get_database_url(use_pooler=True)
-        logger.info("🔄 尝试使用连接池连接（端口 6543）...")
-        print("🔄 尝试使用连接池连接（端口 6543）...")
+        if SupabaseConfig.DATABASE_POOLER_URL:
+            logger.info("🔄 使用连接池 URI（DATABASE_POOLER_URL）...")
+            print("🔄 使用连接池 URI（DATABASE_POOLER_URL）...")
+        elif SupabaseConfig.DATABASE_URL:
+            logger.info("🔄 使用完整连接 URI（DATABASE_URL）...")
+            print("🔄 使用完整连接 URI（DATABASE_URL）...")
+        else:
+            logger.info("🔄 尝试使用连接池连接（端口 6543）...")
+            print("🔄 尝试使用连接池连接（端口 6543）...")
     except Exception as e:
         logger.warning(f"⚠️ 连接池配置失败，使用标准连接: {e}")
         print(f"⚠️ 连接池配置失败，使用标准连接: {e}")

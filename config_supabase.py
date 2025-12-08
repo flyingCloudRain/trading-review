@@ -22,6 +22,16 @@ DATA_DIR.mkdir(exist_ok=True)
 class SupabaseConfig:
     """Supabase配置"""
     
+    # 数据库连接 URI（完整连接字符串，优先使用）
+    # 从 Supabase Dashboard -> Settings -> Database -> Connection string 获取
+    # 格式：postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+    DATABASE_URL = os.environ.get('DATABASE_URL', '')
+    
+    # 连接池 URI（推荐使用，可以避免 IPv6 问题）
+    # 从 Supabase Dashboard -> Settings -> Database -> Connection Pooler URL 获取
+    # 格式：postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
+    DATABASE_POOLER_URL = os.environ.get('DATABASE_POOLER_URL', '')
+    
     # Supabase项目URL（从Supabase Dashboard获取）
     SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
     
@@ -44,15 +54,30 @@ class SupabaseConfig:
     def get_database_url(cls, use_pooler: bool = True) -> str:
         """
         获取PostgreSQL数据库连接URL
-        使用项目引用构建连接URL
+        
+        优先级：
+        1. DATABASE_POOLER_URL（如果 use_pooler=True）- 连接池 URI，推荐使用
+        2. DATABASE_URL - 完整连接字符串 URI
+        3. 使用 SUPABASE_PROJECT_REF 和 SUPABASE_DB_PASSWORD 构建
         
         Args:
-            use_pooler: 是否使用连接池（推荐，可以避免 IPv6 问题）
-                       如果为 True，使用端口 6543 和 pooler 域名
-                       如果为 False，使用标准端口 5432
+            use_pooler: 是否优先使用连接池（推荐，可以避免 IPv6 问题）
         """
+        # 优先级 1: 如果提供了连接池 URI 且 use_pooler=True，优先使用
+        if use_pooler and cls.DATABASE_POOLER_URL:
+            return cls.DATABASE_POOLER_URL
+        
+        # 优先级 2: 如果提供了完整连接 URI，直接使用
+        if cls.DATABASE_URL:
+            return cls.DATABASE_URL
+        
+        # 优先级 3: 使用项目引用和密码构建（向后兼容）
         if not cls.SUPABASE_PROJECT_REF or not cls.SUPABASE_DB_PASSWORD:
-            raise ValueError("请配置 SUPABASE_PROJECT_REF 和 SUPABASE_DB_PASSWORD")
+            raise ValueError(
+                "请配置以下任一方式：\n"
+                "1. DATABASE_URL 或 DATABASE_POOLER_URL（推荐，从 Supabase Dashboard 复制）\n"
+                "2. SUPABASE_PROJECT_REF 和 SUPABASE_DB_PASSWORD"
+            )
         
         # 对用户名和密码进行URL编码，防止特殊字符导致解析错误
         encoded_user = quote_plus(cls._DB_USER)
@@ -60,14 +85,6 @@ class SupabaseConfig:
         
         if use_pooler:
             # 使用连接池（推荐）：避免 IPv6 问题，更好的性能
-            # 连接池使用 aws-0-[region].pooler.supabase.com 域名和端口 6543
-            # 注意：需要根据实际区域调整，默认使用通用格式
-            # 如果知道具体区域，可以使用：aws-0-[region].pooler.supabase.com
-            # 否则使用通用格式：db.[PROJECT_REF].supabase.co（但使用端口 6543）
-            # 实际上，Supabase 连接池的 URL 格式是：
-            # postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
-            # 但为了简化，我们先尝试使用标准域名 + 连接池端口
-            # 如果这不行，可以尝试直接使用连接池域名
             return f"postgresql://{encoded_user}.{cls.SUPABASE_PROJECT_REF}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:6543/{cls._DB_NAME}?pgbouncer=true"
         else:
             # 标准连接（可能有 IPv6 问题）
