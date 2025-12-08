@@ -43,7 +43,12 @@ class ZtPoolHistoryService:
         try:
             # 先获取当前涨停股票池数据（在删除之前获取，避免数据丢失）
             # 注意：API 返回的是实时数据
-            stocks = ZtPoolService.get_zt_pool()
+            # 如果指定了target_date，尝试传递日期参数（格式：YYYYMMDD）
+            if target_date is not None:
+                date_str = target_date.strftime('%Y%m%d')
+                stocks = ZtPoolService.get_zt_pool(date=date_str)
+            else:
+                stocks = ZtPoolService.get_zt_pool()
             
             if not stocks:
                 print(f"⚠️  警告: {data_date} 没有获取到涨停股票数据")

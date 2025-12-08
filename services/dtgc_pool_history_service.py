@@ -45,7 +45,12 @@ class DtgcPoolHistoryService:
             db.query(DtgcPoolHistory).filter(DtgcPoolHistory.date == data_date).delete()
         
         # 获取当前跌停股票池数据（注意：API 返回的是实时数据）
-        stocks = DtgcService.get_dtgc_pool()
+        # 如果指定了target_date，尝试传递日期参数（格式：YYYYMMDD）
+        if target_date is not None:
+            date_str = target_date.strftime('%Y%m%d')
+            stocks = DtgcService.get_dtgc_pool(date=date_str)
+        else:
+            stocks = DtgcService.get_dtgc_pool()
         
         # 保存到数据库
         saved_count = 0

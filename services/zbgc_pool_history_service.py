@@ -45,7 +45,12 @@ class ZbgcPoolHistoryService:
             db.query(ZbgcPoolHistory).filter(ZbgcPoolHistory.date == data_date).delete()
         
         # 获取当前炸板股票池数据（注意：API 返回的是实时数据）
-        stocks = ZbgcService.get_zbgc_pool()
+        # 如果指定了target_date，尝试传递日期参数（格式：YYYYMMDD）
+        if target_date is not None:
+            date_str = target_date.strftime('%Y%m%d')
+            stocks = ZbgcService.get_zbgc_pool(date=date_str)
+        else:
+            stocks = ZbgcService.get_zbgc_pool()
         
         # 保存到数据库
         saved_count = 0
