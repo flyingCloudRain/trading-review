@@ -335,14 +335,18 @@ try:
                         df_index = pd.DataFrame(history_data)
                         
                         if 'date' in df_index.columns and 'changePercent' in df_index.columns:
-                            # 确保date列是datetime类型
+                            # 确保date列是datetime类型（从数据库返回的是字符串）
                             if not pd.api.types.is_datetime64_any_dtype(df_index['date']):
                                 df_index['date'] = pd.to_datetime(df_index['date'])
                             
-                            # 过滤非交易日
+                            # 过滤非交易日（这个函数会将date列转换为date对象）
                             df_index = filter_trading_days(df_index, date_column='date')
                             
                             if not df_index.empty:
+                                # filter_trading_days 会将date列转换为date对象，需要重新转换为datetime才能使用.dt访问器
+                                if not pd.api.types.is_datetime64_any_dtype(df_index['date']):
+                                    df_index['date'] = pd.to_datetime(df_index['date'])
+                                
                                 df_index = df_index.sort_values('date')
                                 
                                 # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
