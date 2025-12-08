@@ -183,14 +183,17 @@ try:
                         else:
                             daily_count = daily_count.sort_values('date')
                             
+                            # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
+                            daily_count['date_str'] = daily_count['date'].dt.strftime('%Y-%m-%d')
+                            
                             # 创建折线图 - 使用统一配置
                             from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
                             
                             fig_trend = go.Figure()
                             
-                            # 主折线
+                            # 主折线 - 使用日期字符串作为X轴，确保数据点连续无空白
                             fig_trend.add_trace(go.Scatter(
-                                x=daily_count['date'],
+                                x=daily_count['date_str'],
                                 y=daily_count['跌停股票数'],
                                 mode='lines+markers',
                                 name='跌停股票数',
@@ -225,7 +228,7 @@ try:
                                 annotation_bgcolor="rgba(100, 116, 139, 0.1)"
                             )
                             
-                            # X轴只显示交易日（使用tickvals指定交易日）
+                            # X轴使用类别模式，只显示交易日，数据点连续无空白
                             fig_trend.update_layout(
                                 title=dict(
                                     text="最近2周每日跌停股票总数趋势",
@@ -234,10 +237,8 @@ try:
                                     xanchor='center'
                                 ),
                                 xaxis=dict(
+                                    type='category',  # 使用类别轴，避免非交易日空白
                                     title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
-                                    tickformat='%Y-%m-%d',
-                                    tickmode='array',  # 使用数组模式
-                                    tickvals=daily_count['date'].tolist(),  # 只显示交易日
                                     gridcolor=LINE_CHART_CONFIG['grid_color'],
                                     gridwidth=LINE_CHART_CONFIG['grid_width'],
                                     showgrid=True
