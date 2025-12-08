@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Supabase配置示例
-请复制此文件内容到 .env 文件中，并填入你的Supabase项目信息
+Supabase配置
+支持从 Streamlit secrets 或环境变量读取配置
 """
 import os
 from pathlib import Path
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
-# 加载环境变量
+# 加载环境变量（本地开发使用）
 load_dotenv()
 
 # 项目根目录
@@ -19,31 +19,56 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / 'data'
 DATA_DIR.mkdir(exist_ok=True)
 
+def _get_config_value(key: str, default: str = '') -> str:
+    """
+    获取配置值，优先级：
+    1. Streamlit secrets（如果在 Streamlit 环境中）
+    2. 环境变量（os.environ）
+    
+    Args:
+        key: 配置键名
+        default: 默认值
+    
+    Returns:
+        配置值
+    """
+    # 尝试从 Streamlit secrets 读取（Streamlit Cloud 或本地 Streamlit）
+    try:
+        import streamlit as st
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except (ImportError, RuntimeError, AttributeError):
+        # 不在 Streamlit 环境中，或 secrets 不可用
+        pass
+    
+    # 从环境变量读取（本地开发或非 Streamlit 环境）
+    return os.environ.get(key, default)
+
 class SupabaseConfig:
     """Supabase配置"""
     
     # 数据库连接 URI（完整连接字符串，优先使用）
     # 从 Supabase Dashboard -> Settings -> Database -> Connection string 获取
     # 格式：postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
-    DATABASE_URL = os.environ.get('DATABASE_URL', '')
+    DATABASE_URL = _get_config_value('DATABASE_URL', '')
     
     # 连接池 URI（推荐使用，可以避免 IPv6 问题）
     # 从 Supabase Dashboard -> Settings -> Database -> Connection Pooler URL 获取
     # 格式：postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true
-    DATABASE_POOLER_URL = os.environ.get('DATABASE_POOLER_URL', '')
+    DATABASE_POOLER_URL = _get_config_value('DATABASE_POOLER_URL', '')
     
     # Supabase项目URL（从Supabase Dashboard获取）
-    SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+    SUPABASE_URL = _get_config_value('SUPABASE_URL', '')
     
     # Supabase API密钥（anon key: 用于客户端，受RLS保护）
-    SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', '')
+    SUPABASE_ANON_KEY = _get_config_value('SUPABASE_ANON_KEY', '')
     
     # 数据库连接信息
     # 从Supabase Dashboard -> Settings -> Database 获取密码
-    SUPABASE_DB_PASSWORD = os.environ.get('SUPABASE_DB_PASSWORD', '')
+    SUPABASE_DB_PASSWORD = _get_config_value('SUPABASE_DB_PASSWORD', '')
     
     # 项目引用（用于构建数据库URL，从Settings -> General获取）
-    SUPABASE_PROJECT_REF = os.environ.get('SUPABASE_PROJECT_REF', '')
+    SUPABASE_PROJECT_REF = _get_config_value('SUPABASE_PROJECT_REF', '')
     
     # 固定值（Supabase标准配置）
     _DB_USER = 'postgres'
