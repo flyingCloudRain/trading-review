@@ -32,77 +32,88 @@ try:
         database_url = SupabaseConfig.get_database_url(use_pooler=False)
     
     # 支持 IPv6 连接：优先使用 IPv6，如果失败则回退到 IPv4
-    # 通过解析域名获取 IP 地址
+    # 如果 DNS 解析失败，直接使用原始主机名（让 psycopg2 自己处理）
     import socket
     import urllib.parse
     
     parsed = urllib.parse.urlparse(database_url)
     hostname = parsed.hostname
     
-    # 移除 IPv6 方括号（如果有）
-    if hostname and hostname.startswith('[') and hostname.endswith(']'):
-        hostname = hostname[1:-1]
-    
-    # 优先尝试 IPv6，如果失败则使用 IPv4
-    ip_address = None
-    ip_version = None
-    
-    try:
-        # 首先尝试获取 IPv6 地址（AF_INET6）
-        ipv6_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET6, socket.SOCK_STREAM)
+    # 如果 hostname 已经是 IP 地址格式，直接使用，不进行 DNS 解析
+    if hostname:
+        # 检查是否是 IPv4 地址格式
+        import re
+        ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+        # 检查是否是 IPv6 地址格式（简化检查）
+        ipv6_pattern = r'^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::'
         
-        if ipv6_addresses:
-            # 使用第一个 IPv6 地址
-            ip_address = ipv6_addresses[0][4][0]
-            ip_version = "IPv6"
-            # IPv6 地址需要用方括号包裹
-            formatted_ip = f"[{ip_address}]"
-            logger.info(f"✅ 使用 IPv6 地址连接: {ip_address} (原始主机名: {hostname})")
-            print(f"✅ 使用 IPv6 地址连接: {ip_address} (原始主机名: {hostname})")
+        is_ipv4 = re.match(ipv4_pattern, hostname)
+        is_ipv6 = '::' in hostname or ':' in hostname.replace('::', '')
+        
+        # 如果已经是 IP 地址，直接使用
+        if is_ipv4 or (is_ipv6 and not hostname.startswith('[')):
+            logger.info(f"✅ 检测到 IP 地址格式，直接使用: {hostname}")
+            print(f"✅ 检测到 IP 地址格式，直接使用: {hostname}")
+            # 不需要修改 database_url，直接使用
         else:
-            # 如果没有 IPv6，尝试 IPv4
-            ipv4_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
-            if ipv4_addresses:
-                ip_address = ipv4_addresses[0][4][0]
-                ip_version = "IPv4"
-                formatted_ip = ip_address
-                logger.info(f"✅ 使用 IPv4 地址连接: {ip_address} (原始主机名: {hostname})")
-                print(f"✅ 使用 IPv4 地址连接: {ip_address} (原始主机名: {hostname})")
+            # 移除 IPv6 方括号（如果有）
+            clean_hostname = hostname
+            if hostname.startswith('[') and hostname.endswith(']'):
+                clean_hostname = hostname[1:-1]
+            
+            # 尝试解析域名获取 IP 地址（可选优化）
+            # 如果 DNS 解析失败，直接使用原始主机名，让 psycopg2 处理
+            ip_address = None
+            ip_version = None
+            
+            try:
+                # 首先尝试获取 IPv6 地址（AF_INET6）
+                ipv6_addresses = socket.getaddrinfo(clean_hostname, None, socket.AF_INET6, socket.SOCK_STREAM)
+                
+                if ipv6_addresses:
+                    # 使用第一个 IPv6 地址
+                    ip_address = ipv6_addresses[0][4][0]
+                    ip_version = "IPv6"
+                    # IPv6 地址需要用方括号包裹
+                    formatted_ip = f"[{ip_address}]"
+                    logger.info(f"✅ 解析到 IPv6 地址: {ip_address} (原始主机名: {clean_hostname})")
+                    print(f"✅ 解析到 IPv6 地址: {ip_address} (原始主机名: {clean_hostname})")
+                else:
+                    # 如果没有 IPv6，尝试 IPv4
+                    ipv4_addresses = socket.getaddrinfo(clean_hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+                    if ipv4_addresses:
+                        ip_address = ipv4_addresses[0][4][0]
+                        ip_version = "IPv4"
+                        formatted_ip = ip_address
+                        logger.info(f"✅ 解析到 IPv4 地址: {ip_address} (原始主机名: {clean_hostname})")
+                        print(f"✅ 解析到 IPv4 地址: {ip_address} (原始主机名: {clean_hostname})")
+            except socket.gaierror as e:
+                # DNS 解析失败，直接使用原始主机名（让 psycopg2 自己处理 DNS）
+                logger.info(f"ℹ️ DNS 解析失败，使用原始主机名（让 psycopg2 处理）: {clean_hostname}")
+                print(f"ℹ️ DNS 解析失败，使用原始主机名（让 psycopg2 处理）: {clean_hostname}")
+                # 不修改 database_url，直接使用原始主机名
+            except Exception as e:
+                logger.warning(f"⚠️ 解析 IP 地址时出错，使用原始主机名: {e}")
+                print(f"⚠️ 解析 IP 地址时出错，使用原始主机名: {e}")
+                # 不修改 database_url，直接使用原始主机名
+            
+            # 如果成功解析到 IP 地址，使用 IP 地址替换域名（可选优化）
+            if ip_address and ip_version:
+                new_netloc = f"{parsed.username}:{parsed.password}@{formatted_ip}:{parsed.port or 5432}"
+                database_url = urllib.parse.urlunparse((
+                    parsed.scheme,
+                    new_netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment
+                ))
+                logger.info(f"✅ 使用 {ip_version} 地址连接: {formatted_ip}")
+                print(f"✅ 使用 {ip_version} 地址连接: {formatted_ip}")
             else:
-                logger.warning(f"⚠️ 无法解析 IP 地址，使用原始主机名: {hostname}")
-                print(f"⚠️ 无法解析 IP 地址，使用原始主机名: {hostname}")
-    except socket.gaierror as e:
-        # DNS 解析失败，尝试 IPv4 作为备选
-        logger.warning(f"⚠️ IPv6 DNS 解析失败，尝试 IPv4: {e}")
-        print(f"⚠️ IPv6 DNS 解析失败，尝试 IPv4: {e}")
-        try:
-            ipv4_addresses = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
-            if ipv4_addresses:
-                ip_address = ipv4_addresses[0][4][0]
-                ip_version = "IPv4"
-                formatted_ip = ip_address
-                logger.info(f"✅ 回退到 IPv4 地址连接: {ip_address}")
-                print(f"✅ 回退到 IPv4 地址连接: {ip_address}")
-        except Exception as e2:
-            logger.warning(f"⚠️ IPv4 DNS 解析也失败，使用原始主机名: {e2}")
-            print(f"⚠️ IPv4 DNS 解析也失败，使用原始主机名: {e2}")
-    except Exception as e:
-        logger.warning(f"⚠️ 解析 IP 地址时出错，使用原始连接: {e}")
-        print(f"⚠️ 解析 IP 地址时出错，使用原始连接: {e}")
-    
-    # 如果成功解析到 IP 地址，使用 IP 地址替换域名
-    if ip_address and ip_version:
-        new_netloc = f"{parsed.username}:{parsed.password}@{formatted_ip}:{parsed.port or 5432}"
-        database_url = urllib.parse.urlunparse((
-            parsed.scheme,
-            new_netloc,
-            parsed.path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment
-        ))
-        logger.info(f"✅ 最终使用 {ip_version} 地址: {formatted_ip}")
-        print(f"✅ 最终使用 {ip_version} 地址: {formatted_ip}")
+                # DNS 解析失败，使用原始主机名（这是正常的，psycopg2 会自己处理 DNS）
+                logger.info(f"ℹ️ 使用原始主机名连接: {hostname}（psycopg2 将处理 DNS 解析）")
+                print(f"ℹ️ 使用原始主机名连接: {hostname}（psycopg2 将处理 DNS 解析）")
     
     # 连接参数：设置超时和连接选项
     connect_args = {
