@@ -13,7 +13,16 @@ logger = logging.getLogger(__name__)
 
 # 创建数据库引擎（强制使用Supabase PostgreSQL）
 try:
-    database_url = SupabaseConfig.get_database_url()
+    # 优先使用连接池（可以避免 IPv6 问题）
+    # 如果连接池失败，会自动回退到标准连接
+    try:
+        database_url = SupabaseConfig.get_database_url(use_pooler=True)
+        logger.info("🔄 尝试使用连接池连接（端口 6543）...")
+        print("🔄 尝试使用连接池连接（端口 6543）...")
+    except Exception as e:
+        logger.warning(f"⚠️ 连接池配置失败，使用标准连接: {e}")
+        print(f"⚠️ 连接池配置失败，使用标准连接: {e}")
+        database_url = SupabaseConfig.get_database_url(use_pooler=False)
     
     # 修复 IPv6 连接问题：强制使用 IPv4
     # Streamlit Cloud 可能不支持 IPv6，需要强制使用 IPv4 地址
