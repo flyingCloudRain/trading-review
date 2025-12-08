@@ -76,6 +76,41 @@ class SupabaseConfig:
     _DB_PORT = '5432'
     
     @classmethod
+    def _clean_connection_url(cls, url: str) -> str:
+        """
+        清理连接 URL，移除 psycopg2 不支持的参数
+        
+        Args:
+            url: 原始连接 URL
+        
+        Returns:
+            清理后的连接 URL
+        """
+        from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+        
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+        
+        # 移除 pgbouncer 参数（psycopg2 不支持）
+        if 'pgbouncer' in query_params:
+            del query_params['pgbouncer']
+        
+        # 重新构建查询字符串
+        new_query = urlencode(query_params, doseq=True) if query_params else ''
+        
+        # 重新构建 URL
+        cleaned_url = urlunparse((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            new_query,
+            parsed.fragment
+        ))
+        
+        return cleaned_url
+    
+    @classmethod
     def get_database_url(cls, use_pooler: bool = True) -> str:
         """
         获取PostgreSQL数据库连接URL
@@ -90,11 +125,13 @@ class SupabaseConfig:
         """
         # 优先级 1: 如果提供了连接池 URI 且 use_pooler=True，优先使用
         if use_pooler and cls.DATABASE_POOLER_URL:
-            return cls.DATABASE_POOLER_URL
+            # 清理 URL，移除 pgbouncer 参数
+            return cls._clean_connection_url(cls.DATABASE_POOLER_URL)
         
         # 优先级 2: 如果提供了完整连接 URI，直接使用
         if cls.DATABASE_URL:
-            return cls.DATABASE_URL
+            # 清理 URL，移除 pgbouncer 参数（如果有）
+            return cls._clean_connection_url(cls.DATABASE_URL)
         
         # 优先级 3: 使用项目引用和密码构建（向后兼容）
         if not cls.SUPABASE_PROJECT_REF or not cls.SUPABASE_DB_PASSWORD:
@@ -110,7 +147,9 @@ class SupabaseConfig:
         
         if use_pooler:
             # 使用连接池（推荐）：避免 IPv6 问题，更好的性能
-            return f"postgresql://{encoded_user}.{cls.SUPABASE_PROJECT_REF}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:6543/{cls._DB_NAME}?pgbouncer=true"
+            # 注意：不添加 pgbouncer=true，因为 psycopg2 不支持此参数
+            # 连接池通过端口 6543 和用户名格式自动识别
+            return f"postgresql://{encoded_user}.{cls.SUPABASE_PROJECT_REF}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:6543/{cls._DB_NAME}"
         else:
             # 标准连接（可能有 IPv6 问题）
             return f"postgresql://{encoded_user}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:{cls._DB_PORT}/{cls._DB_NAME}"
