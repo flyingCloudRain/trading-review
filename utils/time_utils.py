@@ -185,7 +185,7 @@ def is_trading_day(target_date: date) -> bool:
         # 如果出错，默认认为是交易日
         return True
 
-def filter_trading_days(df: pd.DataFrame, date_column: str = 'date') -> pd.DataFrame:
+def filter_trading_days(df, date_column: str = 'date'):
     """
     过滤DataFrame，只保留交易日的数据
     
