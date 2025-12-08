@@ -20,9 +20,11 @@ from services.zt_pool_history_service import ZtPoolHistoryService
 from services.zbgc_pool_history_service import ZbgcPoolHistoryService
 from services.dtgc_pool_history_service import DtgcPoolHistoryService
 from services.index_history_service import IndexHistoryService
+from services.scheduler_execution_service import SchedulerExecutionService
 from utils.excel_export import append_sectors_to_excel
-from utils.time_utils import UTC8, get_utc8_date
+from utils.time_utils import UTC8, get_utc8_date, get_utc8_now
 import akshare as ak
+import traceback
 
 # 配置日志
 logging.basicConfig(
@@ -92,14 +94,50 @@ class SectorScheduler:
     
     def save_daily_data(self):
         """保存每日数据到 Supabase 数据库（板块、涨停、炸板、跌停、指数）"""
+        job_id = 'save_daily_data'
+        job_name = '每日15:10保存板块和股票池数据'
+        execution_start_time = get_utc8_now()
+        today = get_utc8_date()
+        is_trading = self._is_trading_day(today)
+        
+        # 初始化统计数据
+        stats = {
+            'industry_sectors_count': 0,
+            'concept_sectors_count': 0,
+            'zt_pool_count': 0,
+            'zbgc_pool_count': 0,
+            'dtgc_pool_count': 0,
+            'index_count': 0,
+        }
+        
+        error_message = None
+        error_traceback = None
+        status = 'success'
+        
         try:
             logger.info("=" * 60)
             logger.info("开始执行每日数据保存任务（保存到 Supabase 数据库）...")
             
             # 检查是否为交易日
-            today = get_utc8_date()
-            if not self._is_trading_day(today):
+            if not is_trading:
                 logger.info(f"今日 ({today}) 不是交易日，跳过数据保存")
+                status = 'skipped'
+                # 记录跳过执行
+                db = SessionLocal()
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=(get_utc8_now() - execution_start_time).total_seconds(),
+                        is_trading_day=is_trading,
+                        notes=f"非交易日，跳过执行"
+                    )
+                finally:
+                    db.close()
                 return
             
             # 验证数据库连接（确保使用 Supabase）
@@ -118,9 +156,11 @@ class SectorScheduler:
             db = SessionLocal()
             try:
                 logger.info(f"📊 开始保存 {today} 的数据到 Supabase 数据库...")
+                
                 # 1. 保存行业板块数据到 Supabase（明确使用今天的日期）
                 try:
                     saved_count = SectorHistoryService.save_today_sectors(db, sector_type='industry', target_date=today)
+                    stats['industry_sectors_count'] = saved_count
                     logger.info(f"✅ 成功保存 {saved_count} 条行业板块数据到 Supabase 数据库 ({today})")
                     
                     # 追加到Excel文件
@@ -128,41 +168,64 @@ class SectorScheduler:
                     logger.info(f"✅ 成功追加行业板块数据到Excel文件: {excel_file}")
                 except Exception as e:
                     logger.error(f"❌ 保存行业板块数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存行业板块数据失败: {str(e)}"
                 
                 # 1.1 保存概念板块数据到 Supabase（明确使用今天的日期）
                 try:
                     concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept', target_date=today)
+                    stats['concept_sectors_count'] = concept_count
                     logger.info(f"✅ 成功保存 {concept_count} 条概念板块数据到 Supabase 数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存概念板块数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存概念板块数据失败: {str(e)}"
                 
                 # 2. 保存涨停股票池数据到 Supabase（明确使用今天的日期）
                 try:
                     zt_count = ZtPoolHistoryService.save_today_zt_pool(db, target_date=today)
+                    stats['zt_pool_count'] = zt_count
                     logger.info(f"✅ 成功保存 {zt_count} 条涨停股票数据到 Supabase 数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存涨停股票数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存涨停股票数据失败: {str(e)}"
                 
                 # 3. 保存炸板股票池数据到 Supabase（明确使用今天的日期）
                 try:
                     zbgc_count = ZbgcPoolHistoryService.save_today_zbgc_pool(db, target_date=today)
+                    stats['zbgc_pool_count'] = zbgc_count
                     logger.info(f"✅ 成功保存 {zbgc_count} 条炸板股票数据到 Supabase 数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存炸板股票数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存炸板股票数据失败: {str(e)}"
                 
                 # 4. 保存跌停股票池数据到 Supabase（明确使用今天的日期）
                 try:
                     dtgc_count = DtgcPoolHistoryService.save_today_dtgc_pool(db, target_date=today)
+                    stats['dtgc_pool_count'] = dtgc_count
                     logger.info(f"✅ 成功保存 {dtgc_count} 条跌停股票数据到 Supabase 数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存跌停股票数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存跌停股票数据失败: {str(e)}"
                 
                 # 5. 保存指数数据到 Supabase（明确使用今天的日期）
                 try:
                     index_count = IndexHistoryService.save_today_indices(db, target_date=today)
+                    stats['index_count'] = index_count
                     logger.info(f"✅ 成功保存 {index_count} 条指数数据到 Supabase 数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存指数数据到 Supabase 失败: {str(e)}", exc_info=True)
+                    if status == 'success':
+                        status = 'failed'
+                        error_message = f"保存指数数据失败: {str(e)}"
                 
                 logger.info("=" * 60)
                 logger.info(f"✅ 每日数据保存任务完成，所有数据已保存到 Supabase 数据库 ({today})")
@@ -170,22 +233,101 @@ class SectorScheduler:
                 
             except Exception as e:
                 logger.error(f"数据库操作失败: {str(e)}", exc_info=True)
+                status = 'failed'
+                error_message = str(e)
+                error_traceback = traceback.format_exc()
             finally:
-                db.close()
+                # 记录执行情况
+                execution_end_time = get_utc8_now()
+                duration = (execution_end_time - execution_start_time).total_seconds()
+                
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=duration,
+                        industry_sectors_count=stats['industry_sectors_count'],
+                        concept_sectors_count=stats['concept_sectors_count'],
+                        zt_pool_count=stats['zt_pool_count'],
+                        zbgc_pool_count=stats['zbgc_pool_count'],
+                        dtgc_pool_count=stats['dtgc_pool_count'],
+                        index_count=stats['index_count'],
+                        error_message=error_message,
+                        error_traceback=error_traceback,
+                        is_trading_day=is_trading,
+                        notes=f"总耗时: {duration:.2f}秒"
+                    )
+                    logger.info(f"✅ 执行记录已保存到数据库")
+                except Exception as e:
+                    logger.error(f"❌ 保存执行记录失败: {str(e)}", exc_info=True)
+                finally:
+                    db.close()
                 
         except Exception as e:
             logger.error(f"定时任务执行失败: {str(e)}", exc_info=True)
+            # 记录失败执行
+            execution_end_time = get_utc8_now()
+            duration = (execution_end_time - execution_start_time).total_seconds()
+            db = SessionLocal()
+            try:
+                SchedulerExecutionService.create_execution(
+                    db=db,
+                    job_id=job_id,
+                    job_name=job_name,
+                    execution_date=today,
+                    execution_time=execution_start_time,
+                    status='failed',
+                    duration_seconds=duration,
+                    error_message=str(e),
+                    error_traceback=traceback.format_exc(),
+                    is_trading_day=is_trading,
+                    notes="任务执行异常"
+                )
+            finally:
+                db.close()
     
     def save_realtime_fund_flow(self):
         """保存即时资金流数据到 Supabase 数据库（概念板块）- 每日15:10执行"""
+        job_id = 'save_realtime_fund_flow_1510'
+        job_name = '每日15:10获取即时资金流数据'
+        execution_start_time = get_utc8_now()
+        today = get_utc8_date()
+        is_trading = self._is_trading_day(today)
+        
+        # 初始化统计数据
+        concept_count = 0
+        error_message = None
+        error_traceback = None
+        status = 'success'
+        
         try:
             logger.info("=" * 60)
             logger.info("开始执行即时资金流数据保存任务（保存到 Supabase 数据库）...")
             
             # 检查是否为交易日
-            today = get_utc8_date()
-            if not self._is_trading_day(today):
+            if not is_trading:
                 logger.info(f"今日 ({today}) 不是交易日，跳过即时资金流数据保存")
+                status = 'skipped'
+                # 记录跳过执行
+                db = SessionLocal()
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=(get_utc8_now() - execution_start_time).total_seconds(),
+                        is_trading_day=is_trading,
+                        notes=f"非交易日，跳过执行"
+                    )
+                finally:
+                    db.close()
                 return
             
             # 验证数据库连接（确保使用 Supabase）

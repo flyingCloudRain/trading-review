@@ -83,6 +83,7 @@ def init_db():
     from models.zb_pool_history import ZbgcPoolHistory
     from models.dt_pool_history import DtgcPoolHistory
     from models.index_history import IndexHistory
+    from models.scheduler_execution import SchedulerExecution
     
     # 创建所有表
     Base.metadata.create_all(bind=engine)
