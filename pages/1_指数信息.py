@@ -208,6 +208,127 @@ try:
         flat_count = len(df_display[df_display['涨跌幅(%)'] == 0]) if '涨跌幅(%)' in df_display.columns else 0
         st.metric("➡️ 平盘指数", flat_count)
     
+    # 重点指数统计
+    focused_indices_codes = get_focused_indices()
+    if focused_indices_codes:
+        # 标准化关注指数代码为6位格式
+        focused_codes_6digit = set()
+        for focused_code in focused_indices_codes:
+            code_6digit = StockIndexService.normalize_index_code(focused_code)
+            focused_codes_6digit.add(code_6digit)
+        
+        # 从当前数据中筛选重点指数
+        focused_indices_data = []
+        matched_codes = set()
+        for idx in indices:
+            db_code = idx.get('code', '')
+            db_code_6digit = StockIndexService.normalize_index_code(db_code)
+            
+            if db_code_6digit in focused_codes_6digit:
+                if db_code_6digit not in matched_codes:
+                    focused_indices_data.append(idx)
+                    matched_codes.add(db_code_6digit)
+        
+        if focused_indices_data:
+            st.markdown('<h2 class="section-header">📊 重点指数统计</h2>', unsafe_allow_html=True)
+            
+            # 计算统计
+            index_total = len(focused_indices_data)
+            index_up = len([i for i in focused_indices_data if i.get('changePercent', 0) > 0])
+            index_down = len([i for i in focused_indices_data if i.get('changePercent', 0) < 0])
+            index_flat = index_total - index_up - index_down
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    "📈 上涨指数",
+                    f"{index_up}",
+                    delta=f"{index_up - index_down}" if index_up > index_down else None,
+                    help="重点指数中上涨的数量"
+                )
+            
+            with col2:
+                st.metric(
+                    "📉 下跌指数",
+                    f"{index_down}",
+                    delta=f"{index_down - index_up}" if index_down > index_up else None,
+                    delta_color="inverse",
+                    help="重点指数中下跌的数量"
+                )
+            
+            with col3:
+                st.metric(
+                    "➡️ 平盘指数",
+                    f"{index_flat}",
+                    help="重点指数中平盘的数量"
+                )
+            
+            # 重点指数涨跌幅表格
+            df_focused_indices = pd.DataFrame(focused_indices_data)
+            
+            # 定义显示顺序：上证指数、深证指数、创业板
+            display_order = {
+                '000001': 1,  # 上证指数
+                '399106': 2,  # 深证综指（深证指数）
+                '399006': 3,  # 创业板指
+                '000016': 4,  # 上证50
+                '000300': 5,  # 沪深300
+                '000852': 6,  # 中证1000
+                '000905': 7,  # 中证500
+            }
+            
+            # 添加排序字段
+            df_focused_indices['sort_order'] = df_focused_indices['code'].map(
+                lambda x: display_order.get(x, 999)  # 未定义的指数排在最后
+            )
+            
+            # 按显示顺序排序
+            df_focused_indices = df_focused_indices.sort_values('sort_order', ascending=True)
+            
+            # 准备表格数据
+            df_focused_display = df_focused_indices[['name', 'code', 'currentPrice', 'changePercent', 'change']].copy()
+            df_focused_display.columns = ['指数名称', '指数代码', '最新价', '涨跌幅(%)', '涨跌额']
+            
+            # 保存原始涨跌幅用于样式判断
+            change_percent_values = df_focused_indices['changePercent'].values
+            
+            # 格式化数值
+            df_focused_display['最新价'] = df_focused_display['最新价'].apply(lambda x: f"{x:.2f}")
+            df_focused_display['涨跌幅(%)'] = df_focused_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%")
+            df_focused_display['涨跌额'] = df_focused_display['涨跌额'].apply(lambda x: f"{x:+.2f}")
+            
+            # 定义样式函数：上涨用深红色背景，下跌用深绿色背景
+            def apply_cell_style(df):
+                """对涨跌幅列应用背景色：上涨深红色，下跌深绿色"""
+                styles = pd.DataFrame('', index=df.index, columns=df.columns)
+                # 只对涨跌幅列应用样式
+                for idx in df.index:
+                    change_pct = change_percent_values[idx]
+                    if change_pct > 0:
+                        # 上涨：深红色背景 (#dc2626)，白色文字，加粗
+                        styles.loc[idx, '涨跌幅(%)'] = 'background-color: #dc2626; color: #ffffff; font-weight: 700;'
+                    elif change_pct < 0:
+                        # 下跌：深绿色背景 (#059669)，白色文字，加粗
+                        styles.loc[idx, '涨跌幅(%)'] = 'background-color: #059669; color: #ffffff; font-weight: 700;'
+                return styles
+            
+            # 使用pandas Styler应用样式
+            styled_df = df_focused_display.style.apply(apply_cell_style, axis=None)
+            
+            # 显示样式化的表格
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True
+            )
+        elif focused_indices_codes:
+            st.markdown('<h2 class="section-header">📊 重点指数统计</h2>', unsafe_allow_html=True)
+            st.warning("⚠️ 当前日期没有重点指数的数据")
+    else:
+        st.markdown('<h2 class="section-header">📊 重点指数统计</h2>', unsafe_allow_html=True)
+        st.info("💡 当前未设置重点指数，请在「关注管理」页面添加关注指数")
+    
     # 涨跌幅TOP 10
     if '涨跌幅(%)' in df_display.columns and len(df_display) > 0:
         st.markdown('<h2 class="section-header">📊 涨跌幅排行</h2>', unsafe_allow_html=True)
