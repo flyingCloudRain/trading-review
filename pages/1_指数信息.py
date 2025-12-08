@@ -239,7 +239,6 @@ try:
             index_flat = index_total - index_up - index_down
             
             col1, col2, col3 = st.columns(3)
-            
             with col1:
                 st.metric(
                     "📈 上涨指数",
@@ -247,7 +246,6 @@ try:
                     delta=f"{index_up - index_down}" if index_up > index_down else None,
                     help="重点指数中上涨的数量"
                 )
-            
             with col2:
                 st.metric(
                     "📉 下跌指数",
@@ -256,7 +254,6 @@ try:
                     delta_color="inverse",
                     help="重点指数中下跌的数量"
                 )
-            
             with col3:
                 st.metric(
                     "➡️ 平盘指数",
@@ -328,74 +325,6 @@ try:
     else:
         st.markdown('<h2 class="section-header">📊 重点指数统计</h2>', unsafe_allow_html=True)
         st.info("💡 当前未设置重点指数，请在「关注管理」页面添加关注指数")
-    
-    # 涨跌幅TOP 10
-    if '涨跌幅(%)' in df_display.columns and len(df_display) > 0:
-        st.markdown('<h2 class="section-header">📊 涨跌幅排行</h2>', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 📈 涨幅TOP 10")
-            # 直接使用已合并的"指数名称（指数代码）"列
-            top_gainers = df_display.nlargest(10, '涨跌幅(%)')[['指数名称（指数代码）', '涨跌幅(%)', '最新价']].copy()
-            top_gainers = top_gainers.sort_values('涨跌幅(%)', ascending=False)
-            
-            # 创建横向柱状图
-            fig_gainers = px.bar(
-                top_gainers,
-                x='涨跌幅(%)',
-                y='指数名称（指数代码）',
-                orientation='h',
-                text='涨跌幅(%)',
-                color='涨跌幅(%)',
-                color_continuous_scale='Reds',
-                labels={'涨跌幅(%)': '涨跌幅(%)', '指数名称（指数代码）': '指数名称（指数代码）'},
-                title='涨幅TOP 10'
-            )
-            fig_gainers.update_traces(
-                texttemplate='%{text:.2f}%',
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>涨跌幅: %{x:.2f}%<extra></extra>'
-            )
-            fig_gainers.update_layout(
-                height=400,
-                showlegend=False,
-                coloraxis_showscale=False,
-                yaxis={'categoryorder': 'total ascending'}
-            )
-            st.plotly_chart(fig_gainers, use_container_width=True)
-        
-        with col2:
-            st.markdown("#### 📉 跌幅TOP 10")
-            # 直接使用已合并的"指数名称（指数代码）"列
-            top_losers = df_display.nsmallest(10, '涨跌幅(%)')[['指数名称（指数代码）', '涨跌幅(%)', '最新价']].copy()
-            top_losers = top_losers.sort_values('涨跌幅(%)', ascending=True)
-            
-            # 创建横向柱状图
-            fig_losers = px.bar(
-                top_losers,
-                x='涨跌幅(%)',
-                y='指数名称（指数代码）',
-                orientation='h',
-                text='涨跌幅(%)',
-                color='涨跌幅(%)',
-                color_continuous_scale='Greens',
-                labels={'涨跌幅(%)': '涨跌幅(%)', '指数名称（指数代码）': '指数名称（指数代码）'},
-                title='跌幅TOP 10'
-            )
-            fig_losers.update_traces(
-                texttemplate='%{text:.2f}%',
-                textposition='outside',
-                hovertemplate='<b>%{y}</b><br>涨跌幅: %{x:.2f}%<extra></extra>'
-            )
-            fig_losers.update_layout(
-                height=400,
-                showlegend=False,
-                coloraxis_showscale=False,
-                yaxis={'categoryorder': 'total descending'}
-            )
-            st.plotly_chart(fig_losers, use_container_width=True)
     
     # 关注指数变化曲线图
     focused_indices_codes = get_focused_indices()
@@ -650,7 +579,7 @@ try:
             file_name=file_name,
             mime="text/csv",
             key="download_index"
-        )
+    )
     else:
         if search_term:
             st.info("💡 请尝试使用其他关键词搜索，或清空搜索框查看全部数据")
