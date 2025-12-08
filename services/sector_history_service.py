@@ -11,11 +11,12 @@ class SectorHistoryService:
     """板块历史数据服务（支持行业板块和概念板块）"""
     
     @staticmethod
-    def save_today_sectors(db: Session, sector_type: str = 'industry') -> int:
+    def save_today_sectors(db: Session, sector_type: str = 'industry', target_date: Optional[date] = None) -> int:
         """
         保存板块数据（自动判断日期）
         - 如果在交易时间内，使用当前日期
         - 如果不在交易时间内，使用上一个交易日
+        - 如果提供了target_date，则使用指定的日期
         
         使用事务和锁机制防止重复数据：
         1. 先获取数据（避免在删除后获取数据时出现问题）
@@ -24,8 +25,12 @@ class SectorHistoryService:
         
         Args:
             sector_type: 板块类型，'industry'（行业板块）或 'concept'（概念板块）
+            target_date: 可选，指定保存的日期。如果为None，则自动判断日期
         """
-        data_date = get_data_date()
+        if target_date is None:
+            data_date = get_data_date()
+        else:
+            data_date = target_date
         
         # 验证板块类型
         if sector_type not in ['industry', 'concept']:

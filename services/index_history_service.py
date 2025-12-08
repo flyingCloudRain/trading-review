@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from datetime import date
@@ -10,13 +10,20 @@ class IndexHistoryService:
     """指数历史数据服务"""
     
     @staticmethod
-    def save_today_indices(db: Session) -> int:
+    def save_today_indices(db: Session, target_date: Optional[date] = None) -> int:
         """
         保存指数数据（自动判断日期）
         - 如果在交易时间内，使用当前日期
         - 如果不在交易时间内，使用上一个交易日
+        - 如果提供了target_date，则使用指定的日期
+        
+        Args:
+            target_date: 可选，指定保存的日期。如果为None，则自动判断日期
         """
-        data_date = get_data_date()
+        if target_date is None:
+            data_date = get_data_date()
+        else:
+            data_date = target_date
         
         # 检查该日期的数据是否已存在
         existing = db.query(IndexHistory).filter(IndexHistory.date == data_date).first()

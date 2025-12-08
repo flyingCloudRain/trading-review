@@ -104,10 +104,10 @@ class SectorScheduler:
             # 获取数据库会话
             db = SessionLocal()
             try:
-                # 1. 保存行业板块数据
+                # 1. 保存行业板块数据（明确使用今天的日期）
                 try:
-                    saved_count = SectorHistoryService.save_today_sectors(db, sector_type='industry')
-                    logger.info(f"✅ 成功保存 {saved_count} 条行业板块数据到数据库")
+                    saved_count = SectorHistoryService.save_today_sectors(db, sector_type='industry', target_date=today)
+                    logger.info(f"✅ 成功保存 {saved_count} 条行业板块数据到数据库 ({today})")
                     
                     # 追加到Excel文件
                     excel_file = append_sectors_to_excel()
@@ -115,42 +115,42 @@ class SectorScheduler:
                 except Exception as e:
                     logger.error(f"❌ 保存行业板块数据失败: {str(e)}", exc_info=True)
                 
-                # 1.1 保存概念板块数据
+                # 1.1 保存概念板块数据（明确使用今天的日期）
                 try:
-                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
-                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块数据到数据库")
+                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept', target_date=today)
+                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存概念板块数据失败: {str(e)}", exc_info=True)
                 
-                # 2. 保存涨停股票池数据
+                # 2. 保存涨停股票池数据（明确使用今天的日期）
                 try:
-                    zt_count = ZtPoolHistoryService.save_today_zt_pool(db)
-                    logger.info(f"✅ 成功保存 {zt_count} 条涨停股票数据到数据库")
+                    zt_count = ZtPoolHistoryService.save_today_zt_pool(db, target_date=today)
+                    logger.info(f"✅ 成功保存 {zt_count} 条涨停股票数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存涨停股票数据失败: {str(e)}", exc_info=True)
                 
-                # 3. 保存炸板股票池数据
+                # 3. 保存炸板股票池数据（明确使用今天的日期）
                 try:
-                    zbgc_count = ZbgcPoolHistoryService.save_today_zbgc_pool(db)
-                    logger.info(f"✅ 成功保存 {zbgc_count} 条炸板股票数据到数据库")
+                    zbgc_count = ZbgcPoolHistoryService.save_today_zbgc_pool(db, target_date=today)
+                    logger.info(f"✅ 成功保存 {zbgc_count} 条炸板股票数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存炸板股票数据失败: {str(e)}", exc_info=True)
                 
-                # 4. 保存跌停股票池数据
+                # 4. 保存跌停股票池数据（明确使用今天的日期）
                 try:
-                    dtgc_count = DtgcPoolHistoryService.save_today_dtgc_pool(db)
-                    logger.info(f"✅ 成功保存 {dtgc_count} 条跌停股票数据到数据库")
+                    dtgc_count = DtgcPoolHistoryService.save_today_dtgc_pool(db, target_date=today)
+                    logger.info(f"✅ 成功保存 {dtgc_count} 条跌停股票数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存跌停股票数据失败: {str(e)}", exc_info=True)
                 
-                # 5. 保存指数数据
+                # 5. 保存指数数据（明确使用今天的日期）
                 try:
-                    index_count = IndexHistoryService.save_today_indices(db)
-                    logger.info(f"✅ 成功保存 {index_count} 条指数数据到数据库")
+                    index_count = IndexHistoryService.save_today_indices(db, target_date=today)
+                    logger.info(f"✅ 成功保存 {index_count} 条指数数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存指数数据失败: {str(e)}", exc_info=True)
                 
-                logger.info("每日数据保存任务完成")
+                logger.info(f"每日数据保存任务完成 ({today})")
                 
             except Exception as e:
                 logger.error(f"数据库操作失败: {str(e)}", exc_info=True)
@@ -174,10 +174,10 @@ class SectorScheduler:
             # 获取数据库会话
             db = SessionLocal()
             try:
-                # 保存概念板块即时资金流数据
+                # 保存概念板块即时资金流数据（明确使用今天的日期）
                 try:
-                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
-                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块即时资金流数据到数据库 (15:10)")
+                    concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept', target_date=today)
+                    logger.info(f"✅ 成功保存 {concept_count} 条概念板块即时资金流数据到数据库 ({today})")
                 except Exception as e:
                     logger.error(f"❌ 保存概念板块即时资金流数据失败: {str(e)}", exc_info=True)
                 

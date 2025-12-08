@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from datetime import date, time as dt_time
@@ -10,15 +10,22 @@ class ZtPoolHistoryService:
     """涨停股票池历史数据服务"""
     
     @staticmethod
-    def save_today_zt_pool(db: Session) -> int:
+    def save_today_zt_pool(db: Session, target_date: Optional[date] = None) -> int:
         """
         保存涨停股票池数据（自动判断日期）
         - 如果在交易时间内，使用当前日期
         - 如果不在交易时间内，使用上一个交易日
+        - 如果提供了target_date，则使用指定的日期
         
         优化：使用事务保护，确保数据不丢失
+        
+        Args:
+            target_date: 可选，指定保存的日期。如果为None，则自动判断日期
         """
-        data_date = get_data_date()
+        if target_date is None:
+            data_date = get_data_date()
+        else:
+            data_date = target_date
         
         try:
             # 先获取当前涨停股票池数据（在删除之前获取，避免数据丢失）

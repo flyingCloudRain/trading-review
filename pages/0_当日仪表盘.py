@@ -187,135 +187,59 @@ try:
     
     # 检查数据是否为空（显示详细诊断信息）
     if not industry_sectors and not concept_sectors and not zt_pool and not dt_pool and not zb_pool and not indices:
+        # 检查是否为交易日
+        from tasks.sector_scheduler import SectorScheduler
+        scheduler = SectorScheduler()
+        is_trading = scheduler._is_trading_day(data_date)
+        
         # 显示诊断信息
-        st.warning("⚠️ 数据诊断信息：")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"- 行业板块数据: {len(industry_sectors) if industry_sectors else 0} 条")
-            st.write(f"- 概念板块数据: {len(concept_sectors) if concept_sectors else 0} 条")
-            st.write(f"- 涨停股票池: {len(zt_pool) if zt_pool else 0} 条")
-            st.write(f"- 跌停股票池: {len(dt_pool) if dt_pool else 0} 条")
-        with col2:
-            st.write(f"- 炸板股票池: {len(zb_pool) if zb_pool else 0} 条")
-            st.write(f"- 指数数据: {len(indices) if indices else 0} 条")
-            st.write(f"- 查询日期: {data_date}")
+        st.warning(f"⚠️ {data_date} 暂无数据")
+        
+        # 显示详细诊断信息
+        with st.expander("📊 查看数据诊断信息"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"- 行业板块数据: {len(industry_sectors) if industry_sectors else 0} 条")
+                st.write(f"- 概念板块数据: {len(concept_sectors) if concept_sectors else 0} 条")
+                st.write(f"- 涨停股票池: {len(zt_pool) if zt_pool else 0} 条")
+                st.write(f"- 跌停股票池: {len(dt_pool) if dt_pool else 0} 条")
+            with col2:
+                st.write(f"- 炸板股票池: {len(zb_pool) if zb_pool else 0} 条")
+                st.write(f"- 指数数据: {len(indices) if indices else 0} 条")
+                st.write(f"- 查询日期: {data_date}")
+                st.write(f"- 是否为交易日: {'是' if is_trading else '否'}")
+        
+        # 根据情况提供不同的提示
+        if data_date == today:
+            if is_trading:
+                st.info("💡 今天是交易日，但数据库中还没有数据。可以：\n1. 等待定时任务自动执行（每日15:10）\n2. 前往「定时任务管理」页面手动执行任务")
+            else:
+                st.info("💡 今天不是交易日，无法获取实时数据。请选择其他日期查看历史数据。")
+        else:
+            if is_trading:
+                st.info("💡 该日期是交易日，但数据库中没有数据。可能原因：\n1. 定时任务还未执行\n2. 数据获取失败\n\n建议：前往「定时任务管理」页面手动执行任务获取数据")
+            else:
+                st.info("💡 该日期不是交易日，无法获取数据。请选择其他交易日查看数据。")
         
         st.info("💡 提示：如果数据应该存在但显示为空，请点击「🔄 清除缓存」按钮清除缓存后重试")
         
-        # 如果是今天或最近的日期，自动获取数据
-        if data_date == today or (today - data_date).days <= 1:
-            # 使用 session state 防止重复获取
-            fetch_key = f"auto_fetch_{data_date}"
-            if fetch_key not in st.session_state:
-                st.session_state[fetch_key] = True
-                
-                with st.spinner("🔄 检测到没有数据，正在自动获取数据，请稍候..."):
-                    try:
-                        from services.sector_history_service import SectorHistoryService
-                        from services.zt_pool_history_service import ZtPoolHistoryService
-                        from services.zbgc_pool_history_service import ZbgcPoolHistoryService
-                        from services.dtgc_pool_history_service import DtgcPoolHistoryService
-                        from services.index_history_service import IndexHistoryService
-                        from utils.excel_export import append_sectors_to_excel
-                        from tasks.sector_scheduler import SectorScheduler
-                        
-                        # 检查是否为交易日（仅对今天的数据）
-                        if data_date == today:
-                            scheduler = SectorScheduler()
-                            if not scheduler._is_trading_day(today):
-                                st.warning(f"⚠️ 今日 ({today}) 不是交易日，无法获取数据")
-                                st.info("💡 请选择其他日期查看历史数据")
-                                st.stop()
-                        
-                        db = SessionLocal()
-                        results = {}
-                        
-                        try:
-                            # 1. 保存行业板块数据
-                            try:
-                                industry_count = SectorHistoryService.save_today_sectors(db, sector_type='industry')
-                                results['sectors'] = industry_count
-                                excel_file = append_sectors_to_excel()
-                            except Exception as e:
-                                results['sectors'] = f"失败: {str(e)}"
-                                st.warning(f"⚠️ 保存行业板块数据失败: {str(e)}")
-                            
-                            # 1.1 保存概念板块数据
-                            try:
-                                concept_count = SectorHistoryService.save_today_sectors(db, sector_type='concept')
-                                if 'sectors' in results and isinstance(results['sectors'], int):
-                                    results['sectors'] = f"行业:{results['sectors']}, 概念:{concept_count}"
-                                elif 'sectors' in results:
-                                    results['sectors'] = f"{results['sectors']}, 概念:{concept_count}"
-                                else:
-                                    results['sectors'] = f"概念:{concept_count}"
-                            except Exception as e:
-                                if 'sectors' in results:
-                                    results['sectors'] = f"{results['sectors']}, 概念失败: {str(e)}"
-                                else:
-                                    results['sectors'] = f"概念失败: {str(e)}"
-                                st.warning(f"⚠️ 保存概念板块数据失败: {str(e)}")
-                            
-                            # 2. 保存涨停股票池数据
-                            try:
-                                zt_count = ZtPoolHistoryService.save_today_zt_pool(db)
-                                results['zt_pool'] = zt_count
-                            except Exception as e:
-                                results['zt_pool'] = f"失败: {str(e)}"
-                                st.warning(f"⚠️ 保存涨停股票数据失败: {str(e)}")
-                            
-                            # 3. 保存炸板股票池数据
-                            try:
-                                zbgc_count = ZbgcPoolHistoryService.save_today_zbgc_pool(db)
-                                results['zbgc_pool'] = zbgc_count
-                            except Exception as e:
-                                results['zbgc_pool'] = f"失败: {str(e)}"
-                                st.warning(f"⚠️ 保存炸板股票数据失败: {str(e)}")
-                            
-                            # 4. 保存跌停股票池数据
-                            try:
-                                dtgc_count = DtgcPoolHistoryService.save_today_dtgc_pool(db)
-                                results['dtgc_pool'] = dtgc_count
-                            except Exception as e:
-                                results['dtgc_pool'] = f"失败: {str(e)}"
-                                st.warning(f"⚠️ 保存跌停股票数据失败: {str(e)}")
-                            
-                            # 5. 保存指数数据
-                            try:
-                                index_count = IndexHistoryService.save_today_indices(db)
-                                results['indices'] = index_count
-                            except Exception as e:
-                                results['indices'] = f"失败: {str(e)}"
-                                st.warning(f"⚠️ 保存指数数据失败: {str(e)}")
-                            
-                            # 清除缓存，重新加载数据
-                            load_daily_data.clear()
-                            
-                        finally:
-                            db.close()
-                        
-                        # 刷新页面以重新加载数据
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ 自动获取数据失败: {str(e)}")
-                        st.info("💡 请稍后重试，或前往定时任务管理页面手动执行")
-                        # 清除标记，允许重试
-                        if fetch_key in st.session_state:
-                            del st.session_state[fetch_key]
-                        st.stop()
-            else:
-                # 已经尝试过获取，但数据仍然为空
-                st.error(f"❌ {data_date} 没有数据，自动获取失败")
-                st.info("💡 请稍后重试，或前往定时任务管理页面手动执行")
-                # 清除标记，允许重试
-                if fetch_key in st.session_state:
-                    del st.session_state[fetch_key]
-                st.stop()
-        else:
-            # 历史日期没有数据，直接提示
-            st.error(f"❌ {data_date} 没有数据，请选择其他日期")
-            st.info("💡 提示：如果数据应该存在但显示为空，请点击「🔄 清除缓存」按钮清除缓存后重试")
+        # 提供操作按钮
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 清除缓存", use_container_width=True, key="clear_cache_btn"):
+                load_daily_data.clear()
+                st.success("✅ 缓存已清除，请刷新页面")
+                st.rerun()
+        with col2:
+            st.markdown("""
+            <a href="/定时任务管理" target="_self">
+                <button style="width: 100%; padding: 0.5rem; background-color: #1f77b4; color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                    ⏰ 前往定时任务管理
+                </button>
+            </a>
+            """, unsafe_allow_html=True)
+        
         st.stop()
     
     # ========== 市场概况 ==========
@@ -825,6 +749,7 @@ try:
         with col1:
             # 计算上涨概念占比
             concept_total = len(concept_sectors) if concept_sectors else 0
+            concept_up = len([s for s in concept_sectors if s.get('changePercent', 0) > 0]) if concept_sectors else 0
             concept_up_ratio = (concept_up / concept_total * 100) if concept_total > 0 else 0
             st.metric(
                 "📈 上涨概念",
@@ -835,6 +760,7 @@ try:
         
         with col2:
             # 计算下跌概念占比
+            concept_down = len([s for s in concept_sectors if s.get('changePercent', 0) < 0]) if concept_sectors else 0
             concept_down_ratio = (concept_down / concept_total * 100) if concept_total > 0 else 0
             st.metric(
                 "📉 下跌概念",
@@ -845,6 +771,7 @@ try:
             )
         
         with col3:
+            concept_net_inflow = sum([s.get('netInflow', 0) for s in concept_sectors if s.get('netInflow', 0) > 0]) if concept_sectors else 0
             st.metric(
                 "💰 资金净流入",
                 f"{concept_net_inflow:.2f}亿元",
@@ -855,32 +782,32 @@ try:
         if len(concept_sectors) > 0:
             df_concept = pd.DataFrame(concept_sectors)
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
+                col1, col2 = st.columns(2)
+                
+                with col1:
                 # 涨幅TOP 10
                 top_up = df_concept.nlargest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_up.empty:
                     fig_up = px.bar(
                         top_up,
-                        x='changePercent',
+                            x='changePercent',
                         y='name',
-                        orientation='h',
-                        color='changePercent',
-                        color_continuous_scale='Reds',
+                            orientation='h',
+                            color='changePercent',
+                            color_continuous_scale='Reds',
                         title='📈 概念板块涨幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
-                    )
+                        )
                     fig_up.update_layout(
-                        yaxis={'categoryorder': 'total ascending'},
-                        height=400,
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        showlegend=False
-                    )
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=400,
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
                     st.plotly_chart(fig_up, use_container_width=True)
-            
-            with col2:
+                
+                with col2:
                 # 跌幅TOP 10
                 top_down = df_concept.nsmallest(10, 'changePercent')[['name', 'changePercent']]
                 if not top_down.empty:
@@ -891,21 +818,21 @@ try:
                     
                     fig_down = px.bar(
                         top_down_sorted,
-                        x='changePercent',
+                            x='changePercent',
                         y='name',
-                        orientation='h',
-                        color='changePercent',
-                        color_continuous_scale='Greens',
+                            orientation='h',
+                            color='changePercent',
+                            color_continuous_scale='Greens',
                         title='📉 概念板块跌幅TOP 10',
                         labels={'changePercent': '涨跌幅(%)', 'name': '概念名称'}
-                    )
+                        )
                     fig_down.update_layout(
-                        yaxis={'categoryorder': 'total ascending'},
-                        height=400,
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        showlegend=False
-                    )
+                            yaxis={'categoryorder': 'total ascending'},
+                            height=400,
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            showlegend=False
+                        )
                     st.plotly_chart(fig_down, use_container_width=True)
             
             # 资金净流入TOP 10
@@ -967,23 +894,23 @@ try:
     st.markdown('<h2 class="section-header">📊 股票池统计</h2>', unsafe_allow_html=True)
     # 显示KPI卡片（统计数据已在市场概况部分计算）
     col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
+        
+        with col1:
+            st.metric(
             "📈 涨停股票",
             f"{zt_count}",
             help="所选日期的涨停股票数量"
-        )
-    
-    with col2:
-        st.metric(
+            )
+        
+        with col2:
+            st.metric(
             "📉 跌停股票",
             f"{dt_count}",
             help="所选日期的跌停股票数量"
-        )
-    
-    with col3:
-        st.metric(
+            )
+        
+        with col3:
+            st.metric(
             "💥 炸板股票",
             f"{zb_count}",
             help="所选日期的炸板股票数量"
@@ -1018,8 +945,8 @@ try:
             )
     
     col1, col2, col3 = st.columns(3)
-    
-    with col1:
+            
+            with col1:
         if zt_pool:
             df_zt = pd.DataFrame(zt_pool)
             # 连板数统计
@@ -1082,8 +1009,8 @@ try:
                     st.plotly_chart(fig_industry, use_container_width=True)
         else:
             st.info("📈 暂无涨停股票数据")
-    
-    with col2:
+            
+            with col2:
         if dt_pool:
             df_dt = pd.DataFrame(dt_pool)
             # 连续跌停数统计
