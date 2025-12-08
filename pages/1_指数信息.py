@@ -325,6 +325,10 @@ try:
                     
                     fig_trend = go.Figure()
                     
+                    # 收集所有数据以确定 Y 轴范围
+                    all_change_percents = []
+                    all_dates = set()
+                    
                     # 为每个关注指数添加一条折线
                     color_idx = 0
                     for code_6digit, index_info in focused_indices_data.items():
@@ -352,11 +356,15 @@ try:
                                 # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
                                 df_index['date_str'] = df_index['date'].dt.strftime('%Y-%m-%d')
                                 
+                                # 收集数据用于确定范围
+                                all_change_percents.extend(df_index['changePercent'].tolist())
+                                all_dates.update(df_index['date_str'].tolist())
+                                
                                 # 选择颜色
                                 color = color_palette[color_idx % len(color_palette)]
                                 color_idx += 1
                                 
-                                # 添加折线
+                                # 添加折线（线条更细）
                                 fig_trend.add_trace(go.Scatter(
                                     x=df_index['date_str'],
                                     y=df_index['changePercent'],
@@ -364,19 +372,46 @@ try:
                                     name=f"{index_name}（{code_6digit}）",
                                     line=dict(
                                         color=color,
-                                        width=LINE_CHART_CONFIG['line_width'],
+                                        width=1.5,  # 线条更细（原来可能是 2 或更大）
                                         shape='spline'  # 平滑曲线
                                     ),
                                     marker=dict(
                                         color=color,
-                                        size=LINE_CHART_CONFIG['marker_size'],
+                                        size=4,  # 标记点更小
                                         line=dict(
-                                            width=LINE_CHART_CONFIG['marker_line_width'],
-                                            color=LINE_CHART_CONFIG['marker_line_color']
+                                            width=0.5,
+                                            color='white'
                                         )
                                     ),
                                     hovertemplate=f'<b>{index_name}</b><br>日期: %{{x}}<br>涨跌幅: %{{y:.2f}}%<extra></extra>'
                                 ))
+                    
+                    # 确定 Y 轴范围（用于背景色矩形）
+                    if all_change_percents:
+                        y_min = min(all_change_percents) - 1  # 留一点边距
+                        y_max = max(all_change_percents) + 1
+                    else:
+                        y_min = -5
+                        y_max = 5
+                    
+                    # 添加背景色：0 以下绿色，0 以上红色
+                    # 绿色背景（0 以下）
+                    fig_trend.add_hrect(
+                        y0=y_min,
+                        y1=0,
+                        fillcolor="rgba(0, 200, 0, 0.15)",  # 浅绿色，透明度 15%
+                        layer="below",
+                        line_width=0,
+                    )
+                    
+                    # 红色背景（0 以上）
+                    fig_trend.add_hrect(
+                        y0=0,
+                        y1=y_max,
+                        fillcolor="rgba(255, 0, 0, 0.15)",  # 浅红色，透明度 15%
+                        layer="below",
+                        line_width=0,
+                    )
                     
                     # 添加零线
                     fig_trend.add_hline(
@@ -387,7 +422,8 @@ try:
                         line_width=LINE_CHART_CONFIG['zero_line_width'],
                         annotation_text="0%",
                         annotation_position="right",
-                        annotation_font_size=12
+                        annotation_font_size=12,
+                        layer="above"  # 确保零线在背景色之上
                     )
                     
                     # 更新布局
