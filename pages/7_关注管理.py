@@ -325,11 +325,6 @@ with tab2:
                 display_options = []
                 code_to_index = {}
                 
-                # 添加默认选项
-                default_option = "请输入需要添加的指数或名称"
-                display_options.append(default_option)
-                code_to_index[default_option] = None
-                
                 # 添加所有可用指数
                 for idx in available_indices:
                     display_text = f"{idx['name']}（{idx['code']}）"
@@ -339,9 +334,109 @@ with tab2:
                 col_add1, col_add2, col_add3 = st.columns([3, 1, 1])
                 
                 with col_add1:
+                    # 初始化 session_state
+                    if 'index_search_input' not in st.session_state:
+                        st.session_state.index_search_input = "请输入需要添加的指数或名称"
+                    
+                    # 添加 CSS 和 JavaScript 来实现在输入框获得焦点时自动清除提示文案
+                    st.markdown("""
+                    <style>
+                    /* 为搜索输入框添加样式 */
+                    div[data-testid*="textInput"] input {
+                        color: #262730;
+                    }
+                    div[data-testid*="textInput"] input::placeholder {
+                        color: #9ca3af;
+                    }
+                    </style>
+                    <script>
+                    // 等待 Streamlit 组件加载完成
+                    function setupAutoClearPlaceholder() {
+                        // 查找所有文本输入框
+                        const inputs = document.querySelectorAll('input[data-testid*="textInput"]');
+                        inputs.forEach((input, index) => {
+                            // 检查是否是我们要处理的输入框（通过 placeholder 或位置判断）
+                            if (input.placeholder && input.placeholder.includes('请输入需要添加的指数')) {
+                                // 如果当前值是提示文案，在获得焦点时清除
+                                if (input.value === input.placeholder || input.value === '请输入需要添加的指数或名称') {
+                                    input.addEventListener('focus', function() {
+                                        if (this.value === '请输入需要添加的指数或名称' || this.value === this.placeholder) {
+                                            this.value = '';
+                                            this.style.color = '#262730';
+                                        }
+                                    }, { once: true });
+                                    
+                                    // 失去焦点时，如果为空则恢复提示文案
+                                    input.addEventListener('blur', function() {
+                                        if (this.value === '') {
+                                            this.value = '请输入需要添加的指数或名称';
+                                            this.style.color = '#9ca3af';
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    
+                    // 页面加载后执行
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', setupAutoClearPlaceholder);
+                    } else {
+                        setupAutoClearPlaceholder();
+                    }
+                    
+                    // Streamlit 页面更新后也执行（使用 MutationObserver）
+                    const observer = new MutationObserver(setupAutoClearPlaceholder);
+                    observer.observe(document.body, { childList: true, subtree: true });
+                    </script>
+                    """, unsafe_allow_html=True)
+                    
+                    # 创建搜索输入框
+                    # 如果当前值是提示文案，使用空字符串，否则使用实际值
+                    current_value = st.session_state.index_search_input
+                    if current_value == "请输入需要添加的指数或名称":
+                        input_value = ""
+                    else:
+                        input_value = current_value
+                    
+                    search_input = st.text_input(
+                        "🔍 搜索指数",
+                        value=input_value,
+                        placeholder="请输入需要添加的指数或名称",
+                        help=f"共 {len(available_indices)} 个可用指数，输入关键词快速查找（点击输入框自动清除提示）",
+                        key="index_search_input_widget"
+                    )
+                    
+                    # 更新 session_state（如果输入框为空，保持提示文案）
+                    if search_input:
+                        st.session_state.index_search_input = search_input
+                    else:
+                        # 如果输入框为空，检查是否应该显示提示文案
+                        # 这里我们保持为空，让 placeholder 显示
+                        st.session_state.index_search_input = ""
+                    
+                    # 根据搜索关键词过滤选项
+                    if search_input and search_input.strip():
+                        filtered_options = [
+                            opt for opt in display_options
+                            if search_input.lower() in opt.lower()
+                        ]
+                    else:
+                        filtered_options = display_options
+                    
+                    # 添加默认提示选项（如果没有搜索或搜索为空）
+                    if not search_input or not search_input.strip():
+                        default_option = "请输入需要添加的指数或名称"
+                        if default_option not in filtered_options:
+                            filtered_options.insert(0, default_option)
+                            code_to_index[default_option] = None
+                    elif not filtered_options:
+                        filtered_options = ["未找到匹配的指数"]
+                        code_to_index["未找到匹配的指数"] = None
+                    
                     selected_display = st.selectbox(
                         "选择要添加的指数",
-                        options=display_options,
+                        options=filtered_options,
                         help=f"共 {len(available_indices)} 个可用指数",
                         key="select_index"
                     )
