@@ -51,21 +51,60 @@ if not DB_AVAILABLE:
     - `SUPABASE_ANON_KEY`: Supabase匿名密钥
     
     ### 🔧 配置步骤：
-    1. 进入 Streamlit Cloud 应用设置
-    2. 点击 **"Secrets"** 标签
-    3. 添加上述环境变量（使用 TOML 格式）
-    4. 保存并重新部署应用
     
-    ### 📝 示例 Secrets 配置：
+    1. **登录 Streamlit Cloud**
+       - 访问 https://share.streamlit.io/
+       - 进入你的应用页面
+       
+    2. **打开应用设置**
+       - 点击应用右上角的 **"⋮"** (三个点) 菜单
+       - 选择 **"Settings"** (设置)
+       
+    3. **配置 Secrets**
+       - 在左侧菜单中点击 **"Secrets"** 标签
+       - 在编辑器中添加以下配置（使用 TOML 格式）
+       
+    4. **保存并重新部署**
+       - 点击 **"Save"** 保存配置
+       - 应用会自动重新部署
+    
+    ### 📝 示例 Secrets 配置（TOML格式）：
     ```toml
+    # 必需配置
     SUPABASE_PROJECT_REF = "your-project-ref"
     SUPABASE_DB_PASSWORD = "your-db-password"
+    
+    # 可选配置（如果使用Supabase API）
     SUPABASE_URL = "https://your-project.supabase.co"
     SUPABASE_ANON_KEY = "your-anon-key"
     ```
     
+    ### 🔍 如何获取 Supabase 配置信息：
+    
+    **1. SUPABASE_PROJECT_REF（项目引用ID）**
+    - 登录 Supabase Dashboard: https://app.supabase.com/
+    - 选择你的项目
+    - 进入 **Settings** → **General**
+    - 在 **Reference ID** 字段中找到项目引用ID
+    
+    **2. SUPABASE_DB_PASSWORD（数据库密码）**
+    - 在 Supabase Dashboard 中
+    - 进入 **Settings** → **Database**
+    - 在 **Database password** 部分
+    - 如果没有设置过密码，点击 **"Reset database password"** 设置新密码
+    - 复制密码（注意：密码只显示一次，请妥善保存）
+    
+    **3. SUPABASE_URL（项目URL，可选）**
+    - 在 **Settings** → **API** 中
+    - 找到 **Project URL**，格式类似：`https://xxxxx.supabase.co`
+    
+    **4. SUPABASE_ANON_KEY（匿名密钥，可选）**
+    - 在 **Settings** → **API** 中
+    - 找到 **anon public** 密钥
+    
     ### 📚 详细配置说明：
-    请查看项目文档：`SUPABASE_SETUP.md`
+    - 查看项目文档：`SUPABASE_SETUP.md`
+    - 或查看：`STREAMLIT_CLOUD_SECRETS.md`
     """)
     with st.expander("查看详细错误信息"):
         st.code(DB_ERROR, language="text")
