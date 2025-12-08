@@ -118,7 +118,7 @@ class SupabaseConfig:
         优先级：
         1. DATABASE_POOLER_URL（如果 use_pooler=True）- 连接池 URI，推荐使用
         2. DATABASE_URL - 完整连接字符串 URI
-        3. 使用 SUPABASE_PROJECT_REF 和 SUPABASE_DB_PASSWORD 构建
+        3. 使用 SUPABASE_PROJECT_REF 和 SUPABASE_DB_PASSWORD 构建 Session Pooler
         
         Args:
             use_pooler: 是否优先使用连接池（推荐，可以避免 IPv6 问题）
@@ -133,7 +133,7 @@ class SupabaseConfig:
             # 清理 URL，移除 pgbouncer 参数（如果有）
             return cls._clean_connection_url(cls.DATABASE_URL)
         
-        # 优先级 3: 使用项目引用和密码构建（向后兼容）
+        # 优先级 3: 使用项目引用和密码构建 Session Pooler（推荐，避免 IPv6 问题）
         if not cls.SUPABASE_PROJECT_REF or not cls.SUPABASE_DB_PASSWORD:
             raise ValueError(
                 "请配置以下任一方式：\n"
@@ -146,10 +146,12 @@ class SupabaseConfig:
         encoded_password = quote_plus(cls.SUPABASE_DB_PASSWORD)
         
         if use_pooler:
-            # 使用连接池（推荐）：避免 IPv6 问题，更好的性能
-            # 注意：不添加 pgbouncer=true，因为 psycopg2 不支持此参数
-            # 连接池通过端口 6543 和用户名格式自动识别
-            return f"postgresql://{encoded_user}.{cls.SUPABASE_PROJECT_REF}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:6543/{cls._DB_NAME}"
+            # 使用 Session Pooler（推荐）：端口 5432，避免 IPv6 问题，更好的性能
+            # 格式：postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-1-[region].pooler.supabase.com:5432/postgres
+            # 注意：区域需要根据实际项目配置，这里使用 ap-southeast-1 作为默认值
+            # 如果区域不同，建议直接使用 DATABASE_POOLER_URL 配置
+            pooler_host = f"aws-1-ap-southeast-1.pooler.supabase.com"
+            return f"postgresql://{encoded_user}.{cls.SUPABASE_PROJECT_REF}:{encoded_password}@{pooler_host}:{cls._DB_PORT}/{cls._DB_NAME}"
         else:
             # 标准连接（可能有 IPv6 问题）
             return f"postgresql://{encoded_user}:{encoded_password}@db.{cls.SUPABASE_PROJECT_REF}.supabase.co:{cls._DB_PORT}/{cls._DB_NAME}"
