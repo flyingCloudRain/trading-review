@@ -43,6 +43,6 @@ echo ""
 echo "git remote set-url origin https://YOUR_TOKEN@github.com/flyingCloudRain/trading-review.git"
 echo "git push origin main"
 echo ""
-echo "（将 YOUR_TOKEN 替换为你的实际 token）"
+echo "注意：请将 YOUR_TOKEN 替换为你的实际 Token"
 echo ""
 
