@@ -6,6 +6,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 import sys
 
@@ -17,7 +18,9 @@ sys.path.insert(0, str(project_root))
 try:
     from database.db import SessionLocal
     from services.index_history_service import IndexHistoryService
-    from utils.time_utils import get_utc8_date, get_data_date
+    from services.stock_index_service import StockIndexService
+    from utils.time_utils import get_utc8_date, get_data_date, filter_trading_days
+    from utils.focused_indices import get_focused_indices
     from datetime import date, timedelta
     DB_AVAILABLE = True
 except (ValueError, RuntimeError) as e:
@@ -272,6 +275,169 @@ try:
                 yaxis={'categoryorder': 'total descending'}
             )
             st.plotly_chart(fig_losers, use_container_width=True)
+    
+    # 关注指数变化曲线图
+    focused_indices_codes = get_focused_indices()
+    if focused_indices_codes:
+        st.markdown('<h2 class="section-header">📈 关注指数变化曲线</h2>', unsafe_allow_html=True)
+        
+        # 日期范围选择（最近1个月）
+        trend_end_date = selected_date
+        trend_start_date = trend_end_date - timedelta(days=29)  # 30天（包含今天）
+        
+        try:
+            db_trend = SessionLocal()
+            try:
+                # 获取关注指数的历史数据
+                focused_indices_data = {}
+                
+                # 标准化关注指数代码为6位格式
+                focused_codes_6digit = set()
+                for focused_code in focused_indices_codes:
+                    code_6digit = StockIndexService.normalize_index_code(focused_code)
+                    focused_codes_6digit.add(code_6digit)
+                
+                # 为每个关注指数获取历史数据
+                for focused_code in focused_indices_codes:
+                    code_6digit = StockIndexService.normalize_index_code(focused_code)
+                    history_data = IndexHistoryService.get_index_by_code_and_date_range(
+                        db_trend, code_6digit, trend_start_date, trend_end_date
+                    )
+                    
+                    if history_data:
+                        # 获取指数名称（从第一条数据中获取）
+                        index_name = history_data[0].get('name', focused_code)
+                        focused_indices_data[code_6digit] = {
+                            'name': index_name,
+                            'code': code_6digit,
+                            'data': history_data
+                        }
+                
+                db_trend.close()
+                
+                if focused_indices_data:
+                    # 准备图表数据
+                    from chart_config.chart_config import LINE_CHART_CONFIG, LINE_CHART_COLORS
+                    import plotly.colors as pc
+                    
+                    # 获取多线条配色方案
+                    color_palette = pc.qualitative.Set3
+                    
+                    fig_trend = go.Figure()
+                    
+                    # 为每个关注指数添加一条折线
+                    color_idx = 0
+                    for code_6digit, index_info in focused_indices_data.items():
+                        history_data = index_info['data']
+                        index_name = index_info['name']
+                        
+                        # 转换为DataFrame
+                        df_index = pd.DataFrame(history_data)
+                        
+                        if 'date' in df_index.columns and 'changePercent' in df_index.columns:
+                            # 确保date列是datetime类型
+                            if not pd.api.types.is_datetime64_any_dtype(df_index['date']):
+                                df_index['date'] = pd.to_datetime(df_index['date'])
+                            
+                            # 过滤非交易日
+                            df_index = filter_trading_days(df_index, date_column='date')
+                            
+                            if not df_index.empty:
+                                df_index = df_index.sort_values('date')
+                                
+                                # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
+                                df_index['date_str'] = df_index['date'].dt.strftime('%Y-%m-%d')
+                                
+                                # 选择颜色
+                                color = color_palette[color_idx % len(color_palette)]
+                                color_idx += 1
+                                
+                                # 添加折线
+                                fig_trend.add_trace(go.Scatter(
+                                    x=df_index['date_str'],
+                                    y=df_index['changePercent'],
+                                    mode='lines+markers',
+                                    name=f"{index_name}（{code_6digit}）",
+                                    line=dict(
+                                        color=color,
+                                        width=LINE_CHART_CONFIG['line_width'],
+                                        shape='spline'  # 平滑曲线
+                                    ),
+                                    marker=dict(
+                                        color=color,
+                                        size=LINE_CHART_CONFIG['marker_size'],
+                                        line=dict(
+                                            width=LINE_CHART_CONFIG['marker_line_width'],
+                                            color=LINE_CHART_CONFIG['marker_line_color']
+                                        )
+                                    ),
+                                    hovertemplate=f'<b>{index_name}</b><br>日期: %{{x}}<br>涨跌幅: %{{y:.2f}}%<extra></extra>'
+                                ))
+                    
+                    # 添加零线
+                    fig_trend.add_hline(
+                        y=0,
+                        line_dash="dash",
+                        line_color=LINE_CHART_CONFIG['zero_line_color'],
+                        opacity=LINE_CHART_CONFIG['zero_line_opacity'],
+                        line_width=LINE_CHART_CONFIG['zero_line_width'],
+                        annotation_text="0%",
+                        annotation_position="right",
+                        annotation_font_size=12
+                    )
+                    
+                    # 更新布局
+                    fig_trend.update_layout(
+                        title=dict(
+                            text="关注指数涨跌幅变化趋势（最近1个月）",
+                            font=dict(size=LINE_CHART_CONFIG['title_font_size']),
+                            x=0.5,
+                            xanchor='center'
+                        ),
+                        xaxis=dict(
+                            type='category',  # 使用类别轴，避免非交易日空白
+                            title=dict(text="日期", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
+                            gridcolor=LINE_CHART_CONFIG['grid_color'],
+                            gridwidth=LINE_CHART_CONFIG['grid_width'],
+                            showgrid=True
+                        ),
+                        yaxis=dict(
+                            title=dict(text="涨跌幅(%)", font=dict(size=LINE_CHART_CONFIG['axis_title_font_size'])),
+                            gridcolor=LINE_CHART_CONFIG['grid_color'],
+                            gridwidth=LINE_CHART_CONFIG['grid_width'],
+                            showgrid=True
+                        ),
+                        height=LINE_CHART_CONFIG['height'],
+                        hovermode='x unified',
+                        showlegend=True,
+                        legend=dict(
+                            orientation="v",
+                            yanchor="top",
+                            y=1,
+                            xanchor="left",
+                            x=1.02
+                        ),
+                        plot_bgcolor=LINE_CHART_CONFIG['plot_bgcolor'],
+                        paper_bgcolor=LINE_CHART_CONFIG['paper_bgcolor'],
+                        font=dict(
+                            family=LINE_CHART_CONFIG['font_family'],
+                            size=LINE_CHART_CONFIG['font_size']
+                        )
+                    )
+                    
+                    st.plotly_chart(fig_trend, use_container_width=True)
+                else:
+                    st.info("📭 暂无关注指数的历史数据")
+                    
+            except Exception as e:
+                if 'db_trend' in locals():
+                    db_trend.close()
+                st.warning(f"⚠️ 获取关注指数历史数据失败: {str(e)}")
+        except Exception as e:
+            st.warning(f"⚠️ 显示关注指数变化曲线失败: {str(e)}")
+    else:
+        st.markdown('<h2 class="section-header">📈 关注指数变化曲线</h2>', unsafe_allow_html=True)
+        st.info("💡 当前未设置关注指数，请在「关注管理」页面添加关注指数后查看变化曲线")
     
     # 完整数据表格
     st.markdown('<h2 class="section-header">📋 完整数据</h2>', unsafe_allow_html=True)
