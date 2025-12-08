@@ -183,7 +183,9 @@ try:
                         else:
                             daily_count = daily_count.sort_values('date')
                             
-                            # 将日期转换为字符串格式，用于X轴显示（避免非交易日空白）
+                            # 确保date列是datetime类型，然后转换为字符串格式，用于X轴显示（避免非交易日空白）
+                            if not pd.api.types.is_datetime64_any_dtype(daily_count['date']):
+                                daily_count['date'] = pd.to_datetime(daily_count['date'])
                             daily_count['date_str'] = daily_count['date'].dt.strftime('%Y-%m-%d')
                             
                             # 创建折线图 - 使用统一配置
