@@ -160,25 +160,115 @@ else:
                     # 方法2: 如果方法1失败，尝试直接从job对象获取
                     if next_run is None:
                         next_run = getattr(job, 'next_run_time', None)
+                    
+                    # 方法3: 如果调度器未运行或无法获取，尝试从trigger计算下次执行时间
+                    if next_run is None and hasattr(job, 'trigger'):
+                        try:
+                            # 使用trigger的get_next_fire_time方法计算下次执行时间
+                            from apscheduler.triggers.cron import CronTrigger
+                            if isinstance(job.trigger, CronTrigger):
+                                # 计算下次执行时间（基于当前时间和trigger规则）
+                                next_run = job.trigger.get_next_fire_time(None, now)
+                        except Exception:
+                            # 如果计算失败，尝试解析trigger信息
+                            pass
                 except Exception:
                     # 如果获取失败，next_run 保持为 None
                     pass
                 
                 if next_run:
-                    next_run_str = next_run.strftime("%Y-%m-%d %H:%M:%S")
-                    time_until = next_run - now
-                    hours = int(time_until.total_seconds() // 3600)
-                    minutes = int((time_until.total_seconds() % 3600) // 60)
+                    # 确保next_run是datetime对象
+                    if isinstance(next_run, datetime):
+                        next_run_dt = next_run
+                    else:
+                        # 如果是其他类型，尝试转换
+                        try:
+                            next_run_dt = datetime.fromisoformat(str(next_run))
+                            if next_run_dt.tzinfo is None:
+                                # 如果没有时区信息，假设是UTC+8
+                                next_run_dt = UTC8.localize(next_run_dt)
+                        except:
+                            next_run_dt = None
                     
-                    if time_until.total_seconds() > 0:
-                        st.markdown(f"**下次执行时间**: {next_run_str} (还有 {hours}小时{minutes}分钟)")
+                    if next_run_dt:
+                        # 如果next_run_dt没有时区信息，添加UTC+8时区
+                        if next_run_dt.tzinfo is None:
+                            next_run_dt = UTC8.localize(next_run_dt)
+                        # 如果next_run_dt有时区信息，转换为UTC+8
+                        elif next_run_dt.tzinfo != UTC8:
+                            next_run_dt = next_run_dt.astimezone(UTC8)
+                        
+                        next_run_str = next_run_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        time_until = next_run_dt - now
+                        total_seconds = time_until.total_seconds()
+                        
+                        if total_seconds > 0:
+                            days = int(total_seconds // 86400)
+                            hours = int((total_seconds % 86400) // 3600)
+                            minutes = int((total_seconds % 3600) // 60)
+                            
+                            if days > 0:
+                                time_str = f"{days}天{hours}小时{minutes}分钟"
+                            elif hours > 0:
+                                time_str = f"{hours}小时{minutes}分钟"
+                            else:
+                                time_str = f"{minutes}分钟"
+                            
+                            status_prefix = "" if is_running else "（调度器未运行，此为预计时间）"
+                            st.markdown(f"**下次执行时间**: {next_run_str} {status_prefix}")
+                            st.markdown(f"**距离执行**: 还有 {time_str}")
+                        else:
+                            st.markdown(f"**下次执行时间**: {next_run_str} (即将执行或已过期)")
                     else:
-                        st.markdown(f"**下次执行时间**: {next_run_str} (即将执行)")
+                        if is_running:
+                            st.markdown("**下次执行时间**: 未安排")
+                        else:
+                            st.markdown("**下次执行时间**: 未安排（调度器未运行）")
                 else:
-                    if is_running:
-                        st.markdown("**下次执行时间**: 未安排")
+                    # 如果无法获取执行时间，尝试显示trigger信息
+                    if hasattr(job, 'trigger'):
+                        trigger_str = str(job.trigger)
+                        # 尝试从trigger字符串中提取时间信息
+                        if 'hour=15' in trigger_str and 'minute=10' in trigger_str:
+                            # 计算今天的15:10或明天的15:10
+                            today_1510 = now.replace(hour=15, minute=10, second=0, microsecond=0)
+                            if today_1510 > now:
+                                next_run_dt = today_1510
+                            else:
+                                from datetime import timedelta
+                                next_run_dt = today_1510 + timedelta(days=1)
+                            
+                            next_run_str = next_run_dt.strftime("%Y-%m-%d %H:%M:%S")
+                            time_until = next_run_dt - now
+                            total_seconds = time_until.total_seconds()
+                            
+                            if total_seconds > 0:
+                                days = int(total_seconds // 86400)
+                                hours = int((total_seconds % 86400) // 3600)
+                                minutes = int((total_seconds % 3600) // 60)
+                                
+                                if days > 0:
+                                    time_str = f"{days}天{hours}小时{minutes}分钟"
+                                elif hours > 0:
+                                    time_str = f"{hours}小时{minutes}分钟"
+                                else:
+                                    time_str = f"{minutes}分钟"
+                                
+                                status_prefix = "" if is_running else "（调度器未运行，此为预计时间）"
+                                st.markdown(f"**下次执行时间**: {next_run_str} {status_prefix}")
+                                st.markdown(f"**距离执行**: 还有 {time_str}")
+                            else:
+                                st.markdown(f"**下次执行时间**: {next_run_str} (即将执行)")
+                        else:
+                            if is_running:
+                                st.markdown("**下次执行时间**: 未安排")
+                            else:
+                                st.markdown("**下次执行时间**: 未安排（调度器未运行）")
                     else:
-                        st.markdown("**下次执行时间**: 未安排（调度器未运行）")
+                        if is_running:
+                            st.markdown("**下次执行时间**: 未安排")
+                        else:
+                            st.markdown("**下次执行时间**: 未安排（调度器未运行）")
                 
                 # 触发器信息
                 if hasattr(job.trigger, 'fields'):
