@@ -45,7 +45,7 @@ st.markdown("""
     <style>
     /* 统一主标题样式 */
     .main-header {
-        font-size: 2.5rem;
+        font-size: 1.5rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -54,7 +54,7 @@ st.markdown("""
     }
     /* 统一二级标题样式 - 无背景色 */
     .section-header {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #2c3e50;
         margin-top: 2rem;

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-仪表盘页面 - 综合展示指定日期的所有关键数据
+历史仪表盘页面 - 从数据库查询历史数据
 """
 import streamlit as st
 import pandas as pd
@@ -21,12 +21,13 @@ from services.zt_pool_history_service import ZtPoolHistoryService
 from services.dtgc_pool_history_service import DtgcPoolHistoryService
 from services.zbgc_pool_history_service import ZbgcPoolHistoryService
 from services.index_history_service import IndexHistoryService
+from services.stock_index_service import StockIndexService
 from utils.time_utils import get_data_date, get_utc8_date
 from utils.focused_indices import get_focused_indices
 
 st.set_page_config(
-    page_title="仪表盘",
-    page_icon="📊",
+    page_title="历史仪表盘",
+    page_icon="📜",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -36,7 +37,7 @@ st.markdown("""
     <style>
     /* 统一主标题样式 */
     .main-header {
-        font-size: 2.5rem;
+        font-size: 1.5rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -45,7 +46,7 @@ st.markdown("""
     }
     /* 统一二级标题样式 - 无背景色 */
     .section-header {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #2c3e50;
         margin-top: 2rem;
@@ -88,6 +89,48 @@ st.markdown("""
         color: #059669 !important;
         fill: #059669 !important;
     }
+    /* 仪表盘类型选择器样式 */
+    .stRadio > div {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        padding: 1rem;
+        border-radius: 12px;
+        border: 2px solid #e9ecef;
+        margin-bottom: 1.5rem;
+    }
+    .dashboard-type-info {
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    .dashboard-type-info.realtime {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
+        border-left: 4px solid #3b82f6;
+        color: #1e40af;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+    }
+    .dashboard-type-info.history {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
+        border-left: 4px solid #8b5cf6;
+        color: #6b21a8;
+        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+    }
+    .data-source-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+    }
+    .data-source-badge.realtime {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: white;
+    }
+    .data-source-badge.database {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color: white;
+    }
     </style>
     <script>
     // 动态设置涨跌幅颜色，确保颜色加深
@@ -116,18 +159,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 页面标题
-st.markdown('<h1 class="main-header">📊 仪表盘</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-header">📜 历史仪表盘</h1>', unsafe_allow_html=True)
 
-# 日期选择
+# 历史仪表盘：允许选择历史日期
 today = get_utc8_date()
 default_date = get_data_date()  # 默认使用数据日期（自动判断）
 
 selected_date = st.date_input(
-    "📅 选择日期",
+    "📅 选择历史日期",
     value=default_date,
     max_value=today,
     label_visibility="visible",
-    help="选择要查看的日期，默认显示最新可用数据"
+    help="选择要查看的历史日期"
 )
 
 # 处理日期
@@ -136,10 +179,11 @@ if selected_date is None:
 
 data_date = selected_date
 
-# 加载数据
-@st.cache_data(ttl=300)  # 缓存5分钟
-def load_daily_data(target_date: date):
-    """加载指定日期的所有数据"""
+
+# 加载数据 - 历史仪表盘使用数据库
+@st.cache_data(ttl=300)  # 历史数据缓存5分钟
+def load_history_data(target_date: date):
+    """从数据库加载历史数据"""
     db = SessionLocal()
     try:
         # 行业板块数据
@@ -166,14 +210,17 @@ def load_daily_data(target_date: date):
             'zt_pool': zt_pool,
             'dt_pool': dt_pool,
             'zb_pool': zb_pool,
-            'indices': indices
+            'indices': indices,
+            'source': 'database'
         }
     finally:
         db.close()
 
-# 加载数据
+# 加载历史数据
 try:
-    data = load_daily_data(data_date)
+    # 历史仪表盘：从数据库获取数据
+    with st.spinner("📜 正在从数据库加载历史数据..."):
+        data = load_history_data(data_date)
     
     industry_sectors = data['industry_sectors']
     concept_sectors = data['concept_sectors']
@@ -361,8 +408,8 @@ try:
     zb_count = len(zb_pool) if zb_pool else 0
     dt_count = len(dt_pool) if dt_pool else 0
     
-    # 显示市场概况卡片（4列布局）
-    col1, col2, col3, col4 = st.columns(4)
+    # 显示市场概况卡片（3列布局）
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown("#### 📈 主要指数")
@@ -446,29 +493,6 @@ try:
             help="跌停股票数量"
         )
     
-    with col4:
-        st.markdown("#### 📋 数据概览")
-        st.metric(
-            "🏢 行业板块",
-            f"{len(industry_sectors) if industry_sectors else 0}",
-            help="行业板块数量"
-        )
-        st.metric(
-            "💡 概念板块",
-            f"{len(concept_sectors) if concept_sectors else 0}",
-            help="概念板块数量"
-        )
-        st.metric(
-            "⭐ 重点指数",
-            f"{index_total}",
-            help="重点指数数量"
-        )
-        st.metric(
-            "📅 数据日期",
-            f"{data_date}",
-            help="当前显示的数据日期"
-        )
-    
     st.markdown("---")
     
     # 只统计重点关注指数（focused_indices_data 已在市场概况部分计算）
@@ -485,7 +509,6 @@ try:
             st.metric(
                 "📈 上涨指数",
                 f"{index_up}",
-                delta=f"{index_up - index_down}" if index_up > index_down else None,
                 help="重点指数中上涨的数量"
             )
         
@@ -493,8 +516,6 @@ try:
             st.metric(
                 "📉 下跌指数",
                 f"{index_down}",
-                delta=f"{index_down - index_up}" if index_down > index_up else None,
-                delta_color="inverse",
                 help="重点指数中下跌的数量"
             )
         
@@ -526,13 +547,13 @@ try:
         )
         
         # 按显示顺序排序
-        df_focused_indices = df_focused_indices.sort_values('sort_order', ascending=True)
+        df_focused_indices = df_focused_indices.sort_values('sort_order', ascending=True).reset_index(drop=True)
         
         # 准备表格数据
         df_display = df_focused_indices[['name', 'code', 'currentPrice', 'changePercent', 'change']].copy()
         df_display.columns = ['指数名称', '指数代码', '最新价', '涨跌幅(%)', '涨跌额']
         
-        # 保存原始涨跌幅用于样式判断
+        # 保存原始涨跌幅用于样式判断（重置索引后，位置索引与DataFrame索引一致）
         change_percent_values = df_focused_indices['changePercent'].values
         
         # 格式化数值
@@ -540,19 +561,22 @@ try:
         df_display['涨跌幅(%)'] = df_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%")
         df_display['涨跌额'] = df_display['涨跌额'].apply(lambda x: f"{x:+.2f}")
         
-        # 定义样式函数：上涨用深红色背景，下跌用深绿色背景
+        # 定义样式函数：上涨用红色背景，下跌用绿色背景（整行）
         def apply_cell_style(df):
-            """对涨跌幅列应用背景色：上涨深红色，下跌深绿色，加深颜色优化视觉效果"""
+            """对整行应用背景色：上涨红色背景，下跌绿色背景"""
             styles = pd.DataFrame('', index=df.index, columns=df.columns)
-            # 只对涨跌幅列应用样式
+            # 对整行应用样式
             for idx in df.index:
+                # 使用位置索引获取涨跌幅值（因为已经重置了索引）
                 change_pct = change_percent_values[idx]
                 if change_pct > 0:
-                    # 上涨：深红色背景 (#dc2626)，白色文字，加粗
-                    styles.loc[idx, '涨跌幅(%)'] = 'background-color: #dc2626; color: #ffffff; font-weight: 700;'
+                    # 上涨：红色背景 (#ef4444)，白色文字
+                    for col in df.columns:
+                        styles.loc[idx, col] = 'background-color: #ef4444; color: #ffffff;'
                 elif change_pct < 0:
-                    # 下跌：深绿色背景 (#059669)，白色文字，加粗
-                    styles.loc[idx, '涨跌幅(%)'] = 'background-color: #059669; color: #ffffff; font-weight: 700;'
+                    # 下跌：绿色背景 (#10b981)，白色文字
+                    for col in df.columns:
+                        styles.loc[idx, col] = 'background-color: #10b981; color: #ffffff;'
             return styles
         
         # 使用pandas Styler应用样式
@@ -732,12 +756,11 @@ try:
     if concept_sectors:
         st.markdown('<h2 class="section-header">💡 概念板块数据统计</h2>', unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             # 计算上涨概念占比
             concept_total = len(concept_sectors) if concept_sectors else 0
-            concept_up = len([s for s in concept_sectors if s.get('changePercent', 0) > 0]) if concept_sectors else 0
             concept_up_ratio = (concept_up / concept_total * 100) if concept_total > 0 else 0
             st.metric(
                 "📈 上涨概念",
@@ -748,7 +771,6 @@ try:
         
         with col2:
             # 计算下跌概念占比
-            concept_down = len([s for s in concept_sectors if s.get('changePercent', 0) < 0]) if concept_sectors else 0
             concept_down_ratio = (concept_down / concept_total * 100) if concept_total > 0 else 0
             st.metric(
                 "📉 下跌概念",
@@ -759,11 +781,18 @@ try:
             )
         
         with col3:
-            concept_net_inflow = sum([s.get('netInflow', 0) for s in concept_sectors if s.get('netInflow', 0) > 0]) if concept_sectors else 0
             st.metric(
                 "💰 资金净流入",
                 f"{concept_net_inflow:.2f}亿元",
                 help="所选日期的概念板块资金净流入总额"
+            )
+        
+        with col4:
+            st.metric(
+                "💸 资金净流出",
+                f"{concept_net_outflow:.2f}亿元",
+                delta_color="inverse",
+                help="所选日期的概念板块资金净流出总额"
             )
         
         # 概念板块涨跌幅TOP 10
@@ -1209,6 +1238,102 @@ try:
                 st.plotly_chart(fig_zb, use_container_width=True)
         else:
             st.info("💥 暂无炸板股票数据")
+    
+        st.markdown("---")
+        st.markdown('<h2 class="section-header">📈 当日涨停股票详情</h2>', unsafe_allow_html=True)
+        
+        df_zt_display = pd.DataFrame(zt_pool)
+        
+        # 行业筛选功能
+        selected_industry = None
+        if 'industry' in df_zt_display.columns:
+            # 获取所有唯一的行业列表（排除空值）
+            industries = sorted([ind for ind in df_zt_display['industry'].unique() if pd.notna(ind) and str(ind).strip()])
+            if industries:
+                # 添加"全部"选项
+                industry_options = ['全部'] + industries
+                selected_industry = st.selectbox(
+                    "🏢 筛选行业",
+                    options=industry_options,
+                    index=0,
+                    help="选择要查看的行业，选择'全部'显示所有行业"
+                )
+                
+                # 如果选择了具体行业，进行筛选
+                if selected_industry != '全部':
+                    df_zt_display = df_zt_display[df_zt_display['industry'] == selected_industry].copy()
+                    if df_zt_display.empty:
+                        st.info(f"📊 所选行业 '{selected_industry}' 暂无涨停股票数据")
+                        st.stop()
+        
+        # 准备显示的数据
+        display_columns = []
+        column_mapping = {}
+        
+        # 根据实际存在的列进行映射
+        if 'code' in df_zt_display.columns:
+            display_columns.append('code')
+            column_mapping['code'] = '代码'
+        if 'name' in df_zt_display.columns:
+            display_columns.append('name')
+            column_mapping['name'] = '名称'
+        if 'changePercent' in df_zt_display.columns:
+            display_columns.append('changePercent')
+            column_mapping['changePercent'] = '涨跌幅(%)'
+        if 'latestPrice' in df_zt_display.columns:
+            display_columns.append('latestPrice')
+            column_mapping['latestPrice'] = '最新价'
+        if 'turnover' in df_zt_display.columns:
+            display_columns.append('turnover')
+            column_mapping['turnover'] = '成交额(亿元)'
+        if 'circulatingMarketValue' in df_zt_display.columns:
+            display_columns.append('circulatingMarketValue')
+            column_mapping['circulatingMarketValue'] = '流通市值(亿元)'
+        if 'turnoverRate' in df_zt_display.columns:
+            display_columns.append('turnoverRate')
+            column_mapping['turnoverRate'] = '换手率(%)'
+        if 'sealingFunds' in df_zt_display.columns:
+            display_columns.append('sealingFunds')
+            column_mapping['sealingFunds'] = '封板资金(亿元)'
+        if 'firstSealingTime' in df_zt_display.columns:
+            display_columns.append('firstSealingTime')
+            column_mapping['firstSealingTime'] = '首次封板时间'
+        if 'lastSealingTime' in df_zt_display.columns:
+            display_columns.append('lastSealingTime')
+            column_mapping['lastSealingTime'] = '最后封板时间'
+        if 'continuousBoards' in df_zt_display.columns:
+            display_columns.append('continuousBoards')
+            column_mapping['continuousBoards'] = '连板数'
+        if 'industry' in df_zt_display.columns:
+            display_columns.append('industry')
+            column_mapping['industry'] = '所属行业'
+        
+        # 选择要显示的列
+        df_display = df_zt_display[display_columns].copy() if display_columns else df_zt_display.copy()
+        
+        # 重命名列
+        df_display = df_display.rename(columns=column_mapping)
+        
+        # 格式化数值列
+        if '涨跌幅(%)' in df_display.columns:
+            df_display['涨跌幅(%)'] = df_display['涨跌幅(%)'].apply(lambda x: f"{x:.2f}%")
+        if '最新价' in df_display.columns:
+            df_display['最新价'] = df_display['最新价'].apply(lambda x: f"{x:.2f}")
+        if '成交额(亿元)' in df_display.columns:
+            df_display['成交额(亿元)'] = df_display['成交额(亿元)'].apply(lambda x: f"{x:.2f}")
+        if '流通市值(亿元)' in df_display.columns:
+            df_display['流通市值(亿元)'] = df_display['流通市值(亿元)'].apply(lambda x: f"{x:.2f}")
+        if '换手率(%)' in df_display.columns:
+            df_display['换手率(%)'] = df_display['换手率(%)'].apply(lambda x: f"{x:.2f}%")
+        if '封板资金(亿元)' in df_display.columns:
+            df_display['封板资金(亿元)'] = df_display['封板资金(亿元)'].apply(lambda x: f"{x:.2f}")
+        
+        # 按连板数降序排序（如果有连板数列）
+        if '连板数' in df_display.columns:
+            df_display = df_display.sort_values('连板数', ascending=False)
+        
+        # 显示数据表格
+        st.dataframe(df_display, use_container_width=True, height=400)
     
     # ========== 数据更新时间 ==========
     st.markdown("---")

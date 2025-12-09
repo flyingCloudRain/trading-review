@@ -30,7 +30,7 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 1.5rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -38,7 +38,7 @@ st.markdown("""
         border-bottom: 3px solid #1f77b4;
     }
     .section-header {
-        font-size: 1.5rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #2c3e50;
         margin-top: 2.5rem;

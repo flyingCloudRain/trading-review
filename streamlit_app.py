@@ -120,11 +120,78 @@ if 'db_initialized' not in st.session_state:
         st.error(f"⚠️ 数据库初始化失败: {str(e)}")
         st.session_state.db_initialized = False
 
-# 标题
-st.title("📈 A股交易复盘系统 - 数据可视化")
+# 标题和欢迎信息
+st.title("📈 A股交易复盘系统")
+st.markdown("### 数据可视化与分析平台")
 
-# 提示：此文件已不再使用，请使用 pages 目录下的多页面应用
-st.info("💡 请使用左侧导航栏访问各个页面功能")
+# 页面分类导航卡片
+st.markdown("---")
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.markdown("""
+    <div style="padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
+        <h3 style="color: white; margin: 0 0 0.5rem 0;">📊 核心仪表盘</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 0.9rem;">
+        • 实时仪表盘<br>
+        • 历史仪表盘<br>
+        • 指数信息<br>
+        • 板块分析
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div style="padding: 1rem; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border-radius: 10px; color: white;">
+        <h3 style="color: white; margin: 0 0 0.5rem 0;">🚀 股票池分析</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 0.9rem;">
+        • 涨停股票池<br>
+        • 跌停股票池<br>
+        • 炸板股票池
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown("""
+    <div style="padding: 1rem; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border-radius: 10px; color: white;">
+        <h3 style="color: white; margin: 0 0 0.5rem 0;">📝 交易管理</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 0.9rem;">
+        • 交易日志<br>
+        • 个股表现<br>
+        • 复盘日历
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    st.markdown("""
+    <div style="padding: 1rem; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border-radius: 10px; color: white;">
+        <h3 style="color: white; margin: 0 0 0.5rem 0;">⚙️ 系统管理</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 0.9rem;">
+        • 关注管理<br>
+        • 定时任务管理
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+# 快速导航说明
+st.markdown("""
+### 🧭 快速导航
+
+**💡 提示：** 使用左侧导航栏可以快速访问所有功能页面。页面已按功能分类组织，便于查找和使用。
+
+**📊 核心仪表盘** - 实时和历史市场数据概览（已拆分为两个独立页面）  
+**🚀 股票池分析** - 涨停、跌停、炸板股票详细分析  
+**📝 交易管理** - 交易记录、个股查询、复盘日历  
+**⚙️ 系统管理** - 关注列表和定时任务配置
+
+---
+""")
 
 # 侧边栏已移除，使用多页面应用（pages目录）
 # 以下代码已废弃，保留仅用于兼容性

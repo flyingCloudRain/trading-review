@@ -75,7 +75,7 @@ if not DB_AVAILABLE:
 st.markdown("""
     <style>
     .main-header {
-        font-size: 2rem;
+        font-size: 1.5rem;
         font-weight: bold;
         color: #1f77b4;
         margin-bottom: 1.5rem;
@@ -276,19 +276,21 @@ try:
             df_focused_display['涨跌幅(%)'] = df_focused_display['涨跌幅(%)'].apply(lambda x: f"{x:+.2f}%")
             df_focused_display['涨跌额'] = df_focused_display['涨跌额'].apply(lambda x: f"{x:+.2f}")
             
-            # 定义样式函数：上涨用深红色背景，下跌用深绿色背景
+            # 定义样式函数：上涨用红色背景，下跌用绿色背景（整行）
             def apply_cell_style(df):
-                """对涨跌幅列应用背景色：上涨深红色，下跌深绿色"""
+                """对整行应用背景色：上涨红色背景，下跌绿色背景"""
                 styles = pd.DataFrame('', index=df.index, columns=df.columns)
-                # 只对涨跌幅列应用样式
+                # 对整行应用样式
                 for idx in df.index:
                     change_pct = change_percent_values[idx]
                     if change_pct > 0:
-                        # 上涨：深红色背景 (#dc2626)，白色文字，加粗
-                        styles.loc[idx, '涨跌幅(%)'] = 'background-color: #dc2626; color: #ffffff; font-weight: 700;'
+                        # 上涨：红色背景 (#ef4444)，白色文字
+                        for col in df.columns:
+                            styles.loc[idx, col] = 'background-color: #ef4444; color: #ffffff;'
                     elif change_pct < 0:
-                        # 下跌：深绿色背景 (#059669)，白色文字，加粗
-                        styles.loc[idx, '涨跌幅(%)'] = 'background-color: #059669; color: #ffffff; font-weight: 700;'
+                        # 下跌：绿色背景 (#10b981)，白色文字
+                        for col in df.columns:
+                            styles.loc[idx, col] = 'background-color: #10b981; color: #ffffff;'
                 return styles
             
             # 使用pandas Styler应用样式

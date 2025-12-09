@@ -134,18 +134,23 @@ def init_db():
     """初始化数据库"""
     # 导入所有模型，确保它们被注册
     from models.trading_review import TradingReview
+    from models.trading_reason import TradingReason
     from models.sector_history import SectorHistory
     from models.zt_pool_history import ZtPoolHistory
     from models.zb_pool_history import ZbgcPoolHistory
     from models.dt_pool_history import DtgcPoolHistory
     from models.index_history import IndexHistory
     from models.scheduler_execution import SchedulerExecution
+    from models.stock_fund_flow_history import StockFundFlowHistory
     
     # 创建所有表
     Base.metadata.create_all(bind=engine)
     
     # 检查并添加 sector_type 列（如果不存在）
     _ensure_sector_type_column()
+    
+    # 检查并添加交易日志表的止盈止损字段（如果不存在）
+    _ensure_trading_reviews_columns()
 
 def _ensure_sector_type_column():
     """确保 sector_history 表有 sector_type 列（向后兼容）"""
@@ -225,6 +230,97 @@ def _ensure_sector_type_column():
             db.close()
     except Exception as e:
         logger.error(f"❌ 检查 sector_type 列时出错: {str(e)}")
+        # 不抛出异常，允许应用继续运行
+
+def _ensure_trading_reviews_columns():
+    """确保 trading_reviews 表有止盈止损列和市场列，并将review列改为可空（向后兼容）"""
+    try:
+        db = SessionLocal()
+        try:
+            # 检查列是否已存在
+            check_sql = text("""
+                SELECT column_name, is_nullable
+                FROM information_schema.columns 
+                WHERE table_name = 'trading_reviews' 
+                AND column_name IN ('take_profit_price', 'stop_loss_price', 'market', 'review')
+            """)
+            result = db.execute(check_sql).fetchall()
+            existing_columns = {row[0]: row[1] for row in result}
+            
+            # 添加 take_profit_price 列（如果不存在）
+            if 'take_profit_price' not in existing_columns:
+                alter_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ADD COLUMN take_profit_price DECIMAL(10, 2)
+                """)
+                db.execute(alter_sql)
+                db.commit()
+                print("✅ 已为 trading_reviews 表添加 take_profit_price 列")
+            
+            # 添加 stop_loss_price 列（如果不存在）
+            if 'stop_loss_price' not in existing_columns:
+                alter_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ADD COLUMN stop_loss_price DECIMAL(10, 2)
+                """)
+                db.execute(alter_sql)
+                db.commit()
+                print("✅ 已为 trading_reviews 表添加 stop_loss_price 列")
+            
+            # 将 review 列改为可空（如果当前是 NOT NULL）
+            if 'review' in existing_columns and existing_columns['review'] == 'NO':
+                try:
+                    alter_sql = text("""
+                        ALTER TABLE trading_reviews 
+                        ALTER COLUMN review DROP NOT NULL
+                    """)
+                    db.execute(alter_sql)
+                    db.commit()
+                    print("✅ 已将 trading_reviews 表的 review 列改为可空")
+                except Exception as e:
+                    print(f"⚠️  修改 review 列为可空时出错: {e}")
+                    db.rollback()
+            
+            # 添加 market 列（如果不存在）
+            if 'market' not in existing_columns:
+                # 先添加列（允许 NULL，并设置默认值）
+                alter_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ADD COLUMN market VARCHAR(10) DEFAULT 'A股'
+                """)
+                db.execute(alter_sql)
+                db.commit()
+                
+                # 更新现有数据，将所有 NULL 值设置为 'A股'
+                update_sql = text("""
+                    UPDATE trading_reviews 
+                    SET market = 'A股' 
+                    WHERE market IS NULL
+                """)
+                db.execute(update_sql)
+                db.commit()
+                
+                # 然后设置 NOT NULL 约束（在更新数据之后）
+                alter_not_null_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ALTER COLUMN market SET NOT NULL
+                """)
+                db.execute(alter_not_null_sql)
+                db.commit()
+                
+                # 设置默认值（确保新插入的记录有默认值）
+                alter_default_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ALTER COLUMN market SET DEFAULT 'A股'
+                """)
+                db.execute(alter_default_sql)
+                db.commit()
+                
+                print("✅ 已为 trading_reviews 表添加 market 列")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"⚠️  检查/添加 trading_reviews 表列时出错: {e}")
         # 不抛出异常，允许应用继续运行
 
 def get_db():

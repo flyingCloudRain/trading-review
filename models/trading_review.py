@@ -8,21 +8,25 @@ class TradingReview(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     date = Column(String(10), nullable=False, comment='交易日期 YYYY-MM-DD')
-    stock_code = Column(String(10), nullable=False, index=True, comment='股票代码')
-    stock_name = Column(String(50), nullable=False, comment='股票名称')
+    market = Column(String(10), nullable=False, default='A股', comment='市场类型：A股/美股')
+    stock_code = Column(String(10), nullable=False, default='', index=True, comment='股票代码')
+    stock_name = Column(String(50), nullable=False, default='', comment='股票名称')
     operation = Column(String(4), nullable=False, comment='操作类型：buy/sell')
     price = Column(Float, nullable=False, comment='成交价格')
     quantity = Column(Integer, nullable=False, comment='成交数量')
-    total_amount = Column(Float, nullable=False, comment='成交总额')
+    total_amount = Column(Float, nullable=True, comment='成交总额')
     reason = Column(Text, nullable=False, comment='交易原因')
-    review = Column(Text, nullable=False, comment='复盘总结')
+    review = Column(Text, nullable=True, comment='复盘总结')
     profit = Column(Float, nullable=True, comment='盈亏金额')
     profit_percent = Column(Float, nullable=True, comment='盈亏比例')
+    take_profit_price = Column(Float, nullable=True, comment='止盈价格')
+    stop_loss_price = Column(Float, nullable=True, comment='止损价格')
     created_at = Column(DateTime, server_default=func.now(), comment='创建时间')
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment='更新时间')
     
     __table_args__ = (
         CheckConstraint("operation IN ('buy', 'sell')", name='check_operation'),
+        CheckConstraint("market IN ('A股', '美股')", name='check_market'),
         {'sqlite_autoincrement': True}
     )
     
@@ -31,6 +35,7 @@ class TradingReview(Base):
         return {
             'id': self.id,
             'date': self.date,
+            'market': self.market,
             'stockCode': self.stock_code,
             'stockName': self.stock_name,
             'operation': self.operation,
@@ -41,6 +46,8 @@ class TradingReview(Base):
             'review': self.review,
             'profit': self.profit,
             'profitPercent': self.profit_percent,
+            'takeProfitPrice': self.take_profit_price,
+            'stopLossPrice': self.stop_loss_price,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
         }

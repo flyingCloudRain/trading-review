@@ -14,26 +14,43 @@ class TradingReviewService:
         # 验证数据
         TradingReviewService._validate_review(review_data)
         
-        # 计算总金额（如果未提供）
-        if 'totalAmount' not in review_data or not review_data['totalAmount']:
-            if 'price' in review_data and 'quantity' in review_data:
+        # 计算总金额（如果价格和数量都提供了）
+        if 'totalAmount' not in review_data or review_data.get('totalAmount') is None:
+            if 'price' in review_data and 'quantity' in review_data and review_data.get('price') is not None and review_data.get('quantity') is not None:
                 review_data['totalAmount'] = review_data['price'] * review_data['quantity']
             else:
-                raise ValueError('totalAmount is required if price and quantity are not provided')
+                review_data['totalAmount'] = None  # 如果价格或数量为空，总金额也为空
+        
+        # 处理股票代码和名称（确保至少有一个不为空）
+        stock_code = review_data.get('stockCode', '').strip() if review_data.get('stockCode') else ''
+        stock_name = review_data.get('stockName', '').strip() if review_data.get('stockName') else ''
+        
+        # 如果某个字段为空，使用另一个字段的值（如果另一个也不为空）
+        if not stock_code and stock_name:
+            stock_code = stock_name  # 如果代码为空但名称不为空，使用名称作为代码
+        elif not stock_name and stock_code:
+            stock_name = stock_code  # 如果名称为空但代码不为空，使用代码作为名称
+        elif not stock_code and not stock_name:
+            # 如果都为空，使用默认值（这种情况应该已经被验证逻辑捕获，但为了安全起见）
+            stock_code = "未知"
+            stock_name = "未知"
         
         # 创建记录
         review = TradingReview(
             date=review_data['date'],
-            stock_code=review_data['stockCode'],
-            stock_name=review_data['stockName'],
+            market=review_data.get('market', 'A股'),
+            stock_code=stock_code,
+            stock_name=stock_name,
             operation=review_data['operation'],
             price=review_data['price'],
             quantity=review_data['quantity'],
-            total_amount=review_data['totalAmount'],
+            total_amount=review_data.get('totalAmount'),
             reason=review_data['reason'],
-            review=review_data['review'],
+            review=review_data.get('review'),
             profit=review_data.get('profit'),
             profit_percent=review_data.get('profitPercent'),
+            take_profit_price=review_data.get('takeProfitPrice'),
+            stop_loss_price=review_data.get('stopLossPrice'),
         )
         
         db.add(review)
@@ -82,11 +99,28 @@ class TradingReviewService:
             TradingReviewService._validate_date(review_data['date'])
             review.date = review_data['date']
         
-        if 'stockCode' in review_data:
-            review.stock_code = review_data['stockCode']
+        if 'market' in review_data:
+            if review_data['market'] not in ['A股', '美股']:
+                raise ValueError('Market must be "A股" or "美股"')
+            review.market = review_data['market']
         
-        if 'stockName' in review_data:
-            review.stock_name = review_data['stockName']
+        if 'stockCode' in review_data or 'stockName' in review_data:
+            # 处理股票代码和名称（确保至少有一个不为空）
+            stock_code = review_data.get('stockCode', '').strip() if review_data.get('stockCode') else ''
+            stock_name = review_data.get('stockName', '').strip() if review_data.get('stockName') else ''
+            
+            # 如果某个字段为空，使用另一个字段的值（如果另一个也不为空）
+            if not stock_code and stock_name:
+                stock_code = stock_name  # 如果代码为空但名称不为空，使用名称作为代码
+            elif not stock_name and stock_code:
+                stock_name = stock_code  # 如果名称为空但代码不为空，使用代码作为名称
+            elif not stock_code and not stock_name:
+                # 如果都为空，使用默认值（这种情况应该已经被验证逻辑捕获，但为了安全起见）
+                stock_code = "未知"
+                stock_name = "未知"
+            
+            review.stock_code = stock_code
+            review.stock_name = stock_name
         
         if 'operation' in review_data:
             if review_data['operation'] not in ['buy', 'sell']:
@@ -94,13 +128,13 @@ class TradingReviewService:
             review.operation = review_data['operation']
         
         if 'price' in review_data:
-            if review_data['price'] <= 0:
-                raise ValueError('Price must be greater than 0')
+            if review_data['price'] is None or review_data['price'] <= 0:
+                raise ValueError('Price is required and must be greater than 0')
             review.price = review_data['price']
         
         if 'quantity' in review_data:
-            if review_data['quantity'] <= 0:
-                raise ValueError('Quantity must be greater than 0')
+            if review_data['quantity'] is None or review_data['quantity'] <= 0:
+                raise ValueError('Quantity is required and must be greater than 0')
             review.quantity = review_data['quantity']
         
         if 'totalAmount' in review_data:
@@ -120,6 +154,12 @@ class TradingReviewService:
         
         if 'profitPercent' in review_data:
             review.profit_percent = review_data['profitPercent']
+        
+        if 'takeProfitPrice' in review_data:
+            review.take_profit_price = review_data['takeProfitPrice']
+        
+        if 'stopLossPrice' in review_data:
+            review.stop_loss_price = review_data['stopLossPrice']
         
         db.commit()
         db.refresh(review)
@@ -159,21 +199,29 @@ class TradingReviewService:
     @staticmethod
     def _validate_review(review_data: Dict):
         """验证交易复盘记录数据"""
-        required_fields = ['date', 'stockCode', 'stockName', 'operation', 'price', 'quantity', 'reason', 'review']
+        required_fields = ['date', 'operation', 'price', 'quantity', 'reason']
         for field in required_fields:
-            if field not in review_data or not review_data[field]:
+            if field not in review_data or review_data[field] is None:
                 raise ValueError(f'{field} is required')
+        
+        # 股票代码和名称不能同时为空
+        stock_code = review_data.get('stockCode', '').strip() if review_data.get('stockCode') else ''
+        stock_name = review_data.get('stockName', '').strip() if review_data.get('stockName') else ''
+        if not stock_code and not stock_name:
+            raise ValueError('Stock code and stock name cannot both be empty')
         
         TradingReviewService._validate_date(review_data['date'])
         
         if review_data['operation'] not in ['buy', 'sell']:
             raise ValueError('Operation must be "buy" or "sell"')
         
-        if review_data['price'] <= 0:
-            raise ValueError('Price must be greater than 0')
+        # 价格必须大于0
+        if review_data['price'] is None or review_data['price'] <= 0:
+            raise ValueError('Price is required and must be greater than 0')
         
-        if review_data['quantity'] <= 0:
-            raise ValueError('Quantity must be greater than 0')
+        # 数量必须大于0
+        if review_data['quantity'] is None or review_data['quantity'] <= 0:
+            raise ValueError('Quantity is required and must be greater than 0')
     
     @staticmethod
     def _validate_date(date: str):

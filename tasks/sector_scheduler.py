@@ -63,9 +63,19 @@ class SectorScheduler:
             replace_existing=True
         )
         
+        # 每日15:10执行获取个股资金流数据
+        self.scheduler.add_job(
+            func=self.save_stock_fund_flow,
+            trigger=CronTrigger(hour=15, minute=10, timezone=UTC8),
+            id='save_stock_fund_flow_1510',
+            name='每日15:10获取个股资金流数据',
+            replace_existing=True
+        )
+        
         logger.info("定时任务已设置：")
         logger.info("  - 每日15:10（北京时间）执行数据保存（板块、涨停、炸板、跌停、指数）")
         logger.info("  - 每日15:10（北京时间）获取即时资金流数据（概念板块）")
+        logger.info("  - 每日15:10（北京时间）获取个股资金流数据")
     
     def _is_trading_day(self, target_date: date) -> bool:
         """
@@ -440,6 +450,168 @@ class SectorScheduler:
         except Exception as e:
             logger.error(f"即时资金流定时任务执行失败: {str(e)}", exc_info=True)
             # 记录失败执行
+            execution_end_time = get_utc8_now()
+            duration = (execution_end_time - execution_start_time).total_seconds()
+            db = SessionLocal()
+            try:
+                SchedulerExecutionService.create_execution(
+                    db=db,
+                    job_id=job_id,
+                    job_name=job_name,
+                    execution_date=today,
+                    execution_time=execution_start_time,
+                    status='failed',
+                    duration_seconds=duration,
+                    error_message=str(e),
+                    error_traceback=traceback.format_exc(),
+                    is_trading_day=is_trading,
+                    notes="任务执行异常"
+                )
+            finally:
+                db.close()
+    
+    def save_stock_fund_flow(self):
+        """
+        保存个股资金流数据（即时数据）- 每日15:10执行
+        使用 stock_fund_flow_individual 接口
+        
+        逻辑说明：
+        1. 获取关注股票列表（从配置文件或交易日志）
+        2. 对每个股票调用 stock_fund_flow_individual 接口获取即时资金流数据
+        3. 保存日期使用当日交易日
+        4. 如果今天不是交易日，跳过保存
+        """
+        job_id = 'save_stock_fund_flow_1510'
+        job_name = '每日15:10获取个股资金流数据'
+        execution_start_time = get_utc8_now()
+        today = get_utc8_date()
+        is_trading = self._is_trading_day(today)
+        data_date = get_data_date()
+        
+        # 初始化统计数据
+        success_count = 0
+        failed_count = 0
+        error_message = None
+        error_traceback = None
+        status = 'success'
+        
+        try:
+            logger.info("=" * 60)
+            logger.info("开始执行个股资金流数据保存任务...")
+            
+            # 检查是否为交易日
+            if not is_trading:
+                logger.info(f"今日 ({today}，北京时间) 不是交易日，跳过个股资金流数据保存")
+                status = 'skipped'
+                db = SessionLocal()
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=(get_utc8_now() - execution_start_time).total_seconds(),
+                        is_trading_day=is_trading,
+                        notes=f"非交易日，跳过执行"
+                    )
+                finally:
+                    db.close()
+                return
+            
+            # 获取要查询的股票列表
+            from utils.focused_stocks import get_focused_stocks
+            from services.trading_review_service import TradingReviewService
+            
+            # 1. 从关注股票列表获取
+            focused_stocks = get_focused_stocks()
+            
+            # 2. 从交易日志中获取用户交易过的股票代码（去重）
+            db = SessionLocal()
+            try:
+                all_reviews = TradingReviewService.get_all_reviews(db)
+                traded_stocks = list(set([r.stock_code for r in all_reviews if r.stock_code]))
+                
+                # 合并关注股票和交易过的股票（去重）
+                stock_codes = list(set(focused_stocks + traded_stocks))
+                
+                if not stock_codes:
+                    logger.info("没有需要查询的股票，跳过个股资金流数据保存")
+                    status = 'skipped'
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=(get_utc8_now() - execution_start_time).total_seconds(),
+                        is_trading_day=is_trading,
+                        notes="没有需要查询的股票"
+                    )
+                    return
+                
+                logger.info(f"📊 开始保存 {len(stock_codes)} 只股票的资金流数据到 Supabase 数据库...")
+                logger.info(f"📅 保存日期（当日交易日，北京时间）: {data_date}")
+                
+                # 导入个股资金流服务
+                from services.stock_fund_flow_history_service import StockFundFlowHistoryService
+                
+                # 批量保存股票资金流数据
+                results = StockFundFlowHistoryService.save_multiple_stocks_fund_flow(
+                    db=db,
+                    stock_codes=stock_codes,
+                    target_date=data_date
+                )
+                
+                # 统计结果
+                success_count = sum(1 for success in results.values() if success)
+                failed_count = len(results) - success_count
+                
+                logger.info(f"✅ 成功保存 {success_count} 只股票的资金流数据")
+                if failed_count > 0:
+                    logger.warning(f"⚠️  {failed_count} 只股票的资金流数据保存失败")
+                    status = 'partial_success'
+                
+                logger.info("=" * 60)
+                logger.info("✅ 个股资金流数据保存任务完成")
+                logger.info(f"📅 保存日期（当日交易日，北京时间）: {data_date}")
+                logger.info(f"📅 执行日期（北京时间）: {today}")
+                logger.info("=" * 60)
+                
+            except Exception as e:
+                logger.error(f"数据库操作失败: {str(e)}", exc_info=True)
+                status = 'failed'
+                error_message = str(e)
+                error_traceback = traceback.format_exc()
+            finally:
+                # 记录执行情况
+                execution_end_time = get_utc8_now()
+                duration = (execution_end_time - execution_start_time).total_seconds()
+                
+                try:
+                    SchedulerExecutionService.create_execution(
+                        db=db,
+                        job_id=job_id,
+                        job_name=job_name,
+                        execution_date=today,
+                        execution_time=execution_start_time,
+                        status=status,
+                        duration_seconds=duration,
+                        error_message=error_message,
+                        error_traceback=error_traceback,
+                        is_trading_day=is_trading,
+                        notes=f"总耗时: {duration:.2f}秒 | 成功: {success_count} | 失败: {failed_count} | 保存日期（当日交易日，北京时间）: {data_date} | 执行日期（北京时间）: {today}"
+                    )
+                    logger.info(f"✅ 执行记录已保存到数据库")
+                except Exception as e:
+                    logger.error(f"❌ 保存执行记录失败: {str(e)}", exc_info=True)
+                finally:
+                    db.close()
+                    
+        except Exception as e:
+            logger.error(f"个股资金流定时任务执行失败: {str(e)}", exc_info=True)
             execution_end_time = get_utc8_now()
             duration = (execution_end_time - execution_start_time).total_seconds()
             db = SessionLocal()
