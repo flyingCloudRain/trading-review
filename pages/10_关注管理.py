@@ -41,30 +41,9 @@ st.set_page_config(
 )
 
 # 统一标题样式
-st.markdown("""
-    <style>
-    /* 统一主标题样式 */
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 st.markdown('<h1 class="main-header">⭐ 关注管理</h1>', unsafe_allow_html=True)
 

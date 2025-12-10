@@ -32,131 +32,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 页面样式 - 统一标题样式
-st.markdown("""
-    <style>
-    /* 统一主标题样式 */
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        margin-bottom: 0.5rem;
-    }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: bold;
-    }
-    /* 优化指数涨跌幅颜色 - 加深颜色，提升视觉效果 */
-    div[data-testid="stMetricDelta"] {
-        font-weight: 700 !important;
-        font-size: 1.1em !important;
-    }
-    /* 上涨颜色 - 深红色 (#dc2626) - 使用属性选择器 */
-    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"],
-    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Up"]) {
-        color: #dc2626 !important;
-        fill: #dc2626 !important;
-    }
-    /* 下跌颜色 - 深绿色 (#059669) */
-    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"],
-    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Down"]) {
-        color: #059669 !important;
-        fill: #059669 !important;
-    }
-    /* 仪表盘类型选择器样式 */
-    .stRadio > div {
-        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border: 2px solid #e9ecef;
-        margin-bottom: 1.5rem;
-    }
-    .dashboard-type-info {
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-    .dashboard-type-info.realtime {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
-        border-left: 4px solid #3b82f6;
-        color: #1e40af;
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-    }
-    .dashboard-type-info.history {
-        background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
-        border-left: 4px solid #8b5cf6;
-        color: #6b21a8;
-        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
-    }
-    .data-source-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-left: 0.5rem;
-    }
-    .data-source-badge.realtime {
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
-        color: white;
-    }
-    .data-source-badge.database {
-        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        color: white;
-    }
-    </style>
-    <script>
-    // 动态设置涨跌幅颜色，确保颜色加深
-    setTimeout(function() {
-        document.querySelectorAll('div[data-testid="stMetricDelta"]').forEach(function(el) {
-            var text = el.textContent || el.innerText;
-            var svg = el.querySelector('svg');
-            if (text && text.includes('+')) {
-                el.style.color = '#dc2626';
-                el.style.fontWeight = '700';
-                if (svg) {
-                    svg.style.color = '#dc2626';
-                    svg.style.fill = '#dc2626';
-                }
-            } else if (text && text.includes('-')) {
-                el.style.color = '#059669';
-                el.style.fontWeight = '700';
-                if (svg) {
-                    svg.style.color = '#059669';
-                    svg.style.fill = '#059669';
-                }
-            }
-        });
-    }, 200);
-    </script>
-""", unsafe_allow_html=True)
+# 应用统一样式（包含仪表盘特定样式）
+from utils.page_styles import apply_common_styles, get_dashboard_specific_styles
+apply_common_styles(additional_styles=get_dashboard_specific_styles())
 
 # 页面标题
 st.markdown('<h1 class="main-header">📜 历史仪表盘</h1>', unsafe_allow_html=True)
@@ -493,7 +371,6 @@ try:
             help="跌停股票数量"
         )
     
-    st.markdown("---")
     
     # 只统计重点关注指数（focused_indices_data 已在市场概况部分计算）
     index_up = len([i for i in focused_indices_data if i.get('changePercent', 0) > 0]) if focused_indices_data else 0
@@ -1332,7 +1209,8 @@ try:
         if '连板数' in df_display.columns:
             df_display = df_display.sort_values('连板数', ascending=False)
         
-        # 显示数据表格
+        # 显示前20条记录
+        df_display = df_display.head(20)
         st.dataframe(df_display, use_container_width=True, height=400)
     
     # ========== 数据更新时间 ==========

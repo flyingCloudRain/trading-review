@@ -27,74 +27,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 页面样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    .status-card {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 8px;
-        border: 2px solid #e0e0e0;
-        margin-bottom: 1rem;
-    }
-    .status-running {
-        border-color: #28a745;
-    }
-    .status-stopped {
-        border-color: #dc3545;
-    }
-    .job-card {
-        background: #ffffff;
-        padding: 1.2rem;
-        border-radius: 8px;
-        border: 1px solid #e0e0e0;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .result-success {
-        color: #28a745;
-        font-weight: bold;
-    }
-    .result-error {
-        color: #dc3545;
-        font-weight: bold;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# 统一标题样式
-st.markdown("""
-    <style>
-    /* 统一主标题样式 */
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式（包含定时任务管理特定样式）
+from utils.page_styles import apply_common_styles, get_scheduler_specific_styles
+apply_common_styles(additional_styles=get_scheduler_specific_styles())
 
 # 页面标题
 st.markdown('<h1 class="main-header">⏰ 定时任务管理</h1>', unsafe_allow_html=True)

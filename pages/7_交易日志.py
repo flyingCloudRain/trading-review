@@ -41,26 +41,9 @@ st.set_page_config(
 )
 
 # 统一标题样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-    }
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        background: transparent;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 st.markdown('<h1 class="main-header">📝 交易日志</h1>', unsafe_allow_html=True)
 

@@ -41,131 +41,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 页面样式 - 统一标题样式
-st.markdown("""
-    <style>
-    /* 统一主标题样式 */
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        margin-bottom: 0.5rem;
-    }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: bold;
-    }
-    /* 优化指数涨跌幅颜色 - 加深颜色，提升视觉效果 */
-    div[data-testid="stMetricDelta"] {
-        font-weight: 700 !important;
-        font-size: 1.1em !important;
-    }
-    /* 上涨颜色 - 深红色 (#dc2626) - 使用属性选择器 */
-    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Up"],
-    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Up"]) {
-        color: #dc2626 !important;
-        fill: #dc2626 !important;
-    }
-    /* 下跌颜色 - 深绿色 (#059669) */
-    div[data-testid="stMetricDelta"] svg[data-testid="stMetricDeltaIcon-Down"],
-    div[data-testid="stMetricDelta"]:has(> svg[data-testid="stMetricDeltaIcon-Down"]) {
-        color: #059669 !important;
-        fill: #059669 !important;
-    }
-    /* 仪表盘类型选择器样式 */
-    .stRadio > div {
-        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border: 2px solid #e9ecef;
-        margin-bottom: 1.5rem;
-    }
-    .dashboard-type-info {
-        padding: 0.75rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        font-weight: 600;
-    }
-    .dashboard-type-info.realtime {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
-        border-left: 4px solid #3b82f6;
-        color: #1e40af;
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-    }
-    .dashboard-type-info.history {
-        background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.08) 100%);
-        border-left: 4px solid #8b5cf6;
-        color: #6b21a8;
-        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
-    }
-    .data-source-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 12px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-left: 0.5rem;
-    }
-    .data-source-badge.realtime {
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
-        color: white;
-    }
-    .data-source-badge.database {
-        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        color: white;
-    }
-    </style>
-    <script>
-    // 动态设置涨跌幅颜色，确保颜色加深
-    setTimeout(function() {
-        document.querySelectorAll('div[data-testid="stMetricDelta"]').forEach(function(el) {
-            var text = el.textContent || el.innerText;
-            var svg = el.querySelector('svg');
-            if (text && text.includes('+')) {
-                el.style.color = '#dc2626';
-                el.style.fontWeight = '700';
-                if (svg) {
-                    svg.style.color = '#dc2626';
-                    svg.style.fill = '#dc2626';
-                }
-            } else if (text && text.includes('-')) {
-                el.style.color = '#059669';
-                el.style.fontWeight = '700';
-                if (svg) {
-                    svg.style.color = '#059669';
-                    svg.style.fill = '#059669';
-                }
-            }
-        });
-    }, 200);
-    </script>
-""", unsafe_allow_html=True)
+# 应用统一样式（包含仪表盘特定样式）
+from utils.page_styles import apply_common_styles, get_dashboard_specific_styles
+apply_common_styles(additional_styles=get_dashboard_specific_styles())
 
 # 页面标题
 st.markdown('<h1 class="main-header">⚡ 实时仪表盘</h1>', unsafe_allow_html=True)
@@ -582,8 +460,6 @@ try:
                 f"{dt_count}",
                 help="跌停股票数量"
             )
-    
-        st.markdown("---")
     
         # 只统计重点关注指数（focused_indices_data 已在市场概况部分计算）
         index_up = len([i for i in focused_indices_data if i.get('changePercent', 0) > 0]) if focused_indices_data else 0
@@ -1429,7 +1305,8 @@ try:
             if '连板数' in df_display.columns:
                 df_display = df_display.sort_values('连板数', ascending=False)
             
-            # 显示数据表格
+            # 显示前20条记录
+            df_display = df_display.head(20)
             st.dataframe(df_display, use_container_width=True, height=400)
         else:
             st.info("📈 暂无涨停股票数据")
@@ -1438,14 +1315,27 @@ try:
     with tab_fund:
         st.markdown('<h2 class="section-header">💰 个股资金流</h2>', unsafe_allow_html=True)
         
-        # 股票代码输入
-        code_input = st.text_input(
-            "📊 股票代码",
-            value="",
-            help="请输入6位股票代码，如：000001（平安银行）、600000（浦发银行）、300001（特锐德）",
-            placeholder="000001",
-            key="fund_flow_stock_code"
-        )
+        # 搜索和筛选区域
+        col_search1, col_search2 = st.columns([3, 1])
+        
+        with col_search1:
+            # 股票代码搜索（可选）
+            code_input = st.text_input(
+                "🔍 股票代码搜索（可选，留空显示全部）",
+                value="",
+                help="请输入6位股票代码进行筛选，留空则显示全部股票数据",
+                placeholder="留空显示全部，或输入如：000001",
+                key="fund_flow_stock_code"
+            )
+        
+        with col_search2:
+            # 排序选项
+            sort_option = st.selectbox(
+                "📊 排序方式",
+                options=['净流入降序', '净流入升序', '流入资金降序', '流出资金降序', '成交额降序'],
+                index=0,
+                key="fund_flow_sort"
+            )
         
         stock_code = None
         if code_input:
@@ -1458,265 +1348,150 @@ try:
             # 验证是否为6位数字
             if code_input.isdigit() and len(code_input) == 6:
                 stock_code = code_input
-            else:
+            elif code_input:
                 st.error("❌ 请输入有效的6位股票代码")
         
-        # 如果输入了有效的股票代码，获取并显示资金流数据
-        if stock_code:
-            try:
-                # 获取即时资金流数据（带重试机制）
-                with st.spinner("🔄 正在获取个股即时资金流数据..."):
-                    df_fund = None
-                    max_retries = 3
-                    retry_delay = 2
-                    
-                    for retry in range(max_retries):
-                        try:
-                            # 使用 stock_fund_flow_individual 接口获取即时资金流
-                            df_fund = ak.stock_fund_flow_individual(symbol=stock_code)
-                            break  # 成功获取，跳出重试循环
-                        except Exception as e:
-                            if retry < max_retries - 1:
-                                st.warning(f"⚠️ 获取即时资金流数据失败，{retry_delay}秒后重试... ({retry + 1}/{max_retries})")
-                                time.sleep(retry_delay)
-                                retry_delay *= 2  # 指数退避
-                            else:
-                                raise e
+        # 获取并显示资金流数据（无论是否输入股票代码都获取全部数据）
+        try:
+            # 获取即时资金流数据（带重试机制）
+            with st.spinner("🔄 正在获取个股即时资金流数据..."):
+                df_all_fund = None
+                max_retries = 3
+                retry_delay = 2
                 
-                if df_fund is None or df_fund.empty:
-                    st.warning(f"⚠️ 未找到股票代码 {stock_code} 的资金流数据")
-                else:
-                    # 转换日期列为日期类型
-                    if '日期' in df_fund.columns:
-                        df_fund['日期'] = pd.to_datetime(df_fund['日期'])
-                        df_fund = df_fund.sort_values('日期', ascending=False)
-                    
-                    # 资金流统计
-                    if len(df_fund) > 0:
-                        latest_data = df_fund.iloc[0]
-                        
-                        col1, col2, col3, col4, col5 = st.columns(5)
-                        
-                        with col1:
-                            if '主力净流入-净额' in latest_data:
-                                main_net = latest_data['主力净流入-净额']
-                                main_pct = latest_data.get('主力净流入-净占比', 0)
-                                st.metric(
-                                    "主力净流入",
-                                    f"{main_net/100000000:.2f}亿" if abs(main_net) >= 100000000 else f"{main_net/10000:.2f}万",
-                                    delta=f"{main_pct:.2f}%",
-                                    delta_color="normal" if main_net >= 0 else "inverse"
-                                )
-                        
-                        with col2:
-                            if '超大单净流入-净额' in latest_data:
-                                super_large_net = latest_data['超大单净流入-净额']
-                                super_large_pct = latest_data.get('超大单净流入-净占比', 0)
-                                st.metric(
-                                    "超大单净流入",
-                                    f"{super_large_net/100000000:.2f}亿" if abs(super_large_net) >= 100000000 else f"{super_large_net/10000:.2f}万",
-                                    delta=f"{super_large_pct:.2f}%",
-                                    delta_color="normal" if super_large_net >= 0 else "inverse"
-                                )
-                        
-                        with col3:
-                            if '大单净流入-净额' in latest_data:
-                                large_net = latest_data['大单净流入-净额']
-                                large_pct = latest_data.get('大单净流入-净占比', 0)
-                                st.metric(
-                                    "大单净流入",
-                                    f"{large_net/100000000:.2f}亿" if abs(large_net) >= 100000000 else f"{large_net/10000:.2f}万",
-                                    delta=f"{large_pct:.2f}%",
-                                    delta_color="normal" if large_net >= 0 else "inverse"
-                                )
-                        
-                        with col4:
-                            if '中单净流入-净额' in latest_data:
-                                medium_net = latest_data['中单净流入-净额']
-                                medium_pct = latest_data.get('中单净流入-净占比', 0)
-                                st.metric(
-                                    "中单净流入",
-                                    f"{medium_net/100000000:.2f}亿" if abs(medium_net) >= 100000000 else f"{medium_net/10000:.2f}万",
-                                    delta=f"{medium_pct:.2f}%",
-                                    delta_color="normal" if medium_net >= 0 else "inverse"
-                                )
-                        
-                        with col5:
-                            if '小单净流入-净额' in latest_data:
-                                small_net = latest_data['小单净流入-净额']
-                                small_pct = latest_data.get('小单净流入-净占比', 0)
-                                st.metric(
-                                    "小单净流入",
-                                    f"{small_net/100000000:.2f}亿" if abs(small_net) >= 100000000 else f"{small_net/10000:.2f}万",
-                                    delta=f"{small_pct:.2f}%",
-                                    delta_color="normal" if small_net >= 0 else "inverse"
-                                )
-                    
-                    # 资金流趋势图
-                    st.markdown("#### 💰 资金流趋势")
-                    
-                    # 直接使用全部数据，不进行筛选
-                    df_chart = df_fund.copy()
-                    df_chart = df_chart.sort_values('日期', ascending=True)
-                    
-                    # 过滤非交易日（如果日期列存在）
-                    if '日期' in df_chart.columns:
-                        from utils.time_utils import filter_trading_days
-                        df_chart = filter_trading_days(df_chart, date_column='日期')
-                    
-                    # 主力净流入趋势
-                    fig_main = go.Figure()
-                    
-                    if '主力净流入-净额' in df_chart.columns and '日期' in df_chart.columns:
-                        colors = ['#2ca02c' if x >= 0 else '#d62728' for x in df_chart['主力净流入-净额']]
-                        fig_main.add_trace(go.Bar(
-                            x=df_chart['日期'],
-                            y=df_chart['主力净流入-净额'] / 100000000,  # 转换为亿元
-                            name='主力净流入',
-                            marker_color=colors
-                        ))
-                    
-                    fig_main.update_layout(
-                        title="主力净流入趋势",
-                        xaxis_title="日期",
-                        yaxis_title="净流入（亿元）",
-                        height=400,
-                        hovermode='x unified',
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        font=dict(size=12)
-                    )
-                    
-                    st.plotly_chart(fig_main, use_container_width=True)
-                    
-                    # 各类资金流对比
-                    col_chart1, col_chart2 = st.columns(2)
-                    
-                    with col_chart1:
-                        # 各类资金流对比
-                        fig_compare = go.Figure()
-                        
-                        if '日期' in df_chart.columns:
-                            if '超大单净流入-净额' in df_chart.columns:
-                                fig_compare.add_trace(go.Scatter(
-                                    x=df_chart['日期'],
-                                    y=df_chart['超大单净流入-净额'] / 100000000,
-                                    mode='lines+markers',
-                                    name='超大单',
-                                    line=dict(color='#ff7f0e', width=2)
-                                ))
-                            if '大单净流入-净额' in df_chart.columns:
-                                fig_compare.add_trace(go.Scatter(
-                                    x=df_chart['日期'],
-                                    y=df_chart['大单净流入-净额'] / 100000000,
-                                    mode='lines+markers',
-                                    name='大单',
-                                    line=dict(color='#2ca02c', width=2)
-                                ))
-                            if '中单净流入-净额' in df_chart.columns:
-                                fig_compare.add_trace(go.Scatter(
-                                    x=df_chart['日期'],
-                                    y=df_chart['中单净流入-净额'] / 100000000,
-                                    mode='lines+markers',
-                                    name='中单',
-                                    line=dict(color='#9467bd', width=2)
-                                ))
-                            if '小单净流入-净额' in df_chart.columns:
-                                fig_compare.add_trace(go.Scatter(
-                                    x=df_chart['日期'],
-                                    y=df_chart['小单净流入-净额'] / 100000000,
-                                    mode='lines+markers',
-                                    name='小单',
-                                    line=dict(color='#8c564b', width=2)
-                                ))
-                        
-                        fig_compare.update_layout(
-                            title="各类资金流对比",
-                            xaxis_title="日期",
-                            yaxis_title="净流入（亿元）",
-                            height=400,
-                            hovermode='x unified',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(size=12),
-                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                        )
-                        
-                        st.plotly_chart(fig_compare, use_container_width=True)
-                    
-                    with col_chart2:
-                        # 主力净流入占比趋势
-                        fig_pct = go.Figure()
-                        
-                        if '主力净流入-净占比' in df_chart.columns and '日期' in df_chart.columns:
-                            colors_pct = ['#2ca02c' if x >= 0 else '#d62728' for x in df_chart['主力净流入-净占比']]
-                            fig_pct.add_trace(go.Bar(
-                                x=df_chart['日期'],
-                                y=df_chart['主力净流入-净占比'],
-                                name='主力净流入占比',
-                                marker_color=colors_pct
-                            ))
-                        
-                        fig_pct.update_layout(
-                            title="主力净流入占比趋势",
-                            xaxis_title="日期",
-                            yaxis_title="净占比（%）",
-                            height=400,
-                            hovermode='x unified',
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(size=12)
-                        )
-                        
-                        st.plotly_chart(fig_pct, use_container_width=True)
-                    
-                    # 详细数据表格
-                    st.markdown("#### 📋 资金流详细数据")
-                    
-                    # 从原始数据创建用于表格显示的副本（在格式化前排序）
-                    # 直接使用全部数据
-                    display_fund = df_fund.copy()
-                    
-                    # 按主力净流入-净额倒序排序（在格式化前）
-                    if '主力净流入-净额' in display_fund.columns:
-                        display_fund = display_fund.sort_values('主力净流入-净额', ascending=False)
-                    
-                    # 获取所有列（显示全部内容）
-                    all_columns = list(display_fund.columns)
-                    
-                    # 格式化数值列
-                    for col in all_columns:
-                        if col == '日期':
-                            # 格式化日期
-                            if pd.api.types.is_datetime64_any_dtype(display_fund[col]):
-                                display_fund[col] = display_fund[col].dt.strftime('%Y-%m-%d')
-                        elif pd.api.types.is_numeric_dtype(display_fund[col]):
-                            # 判断是否为金额类字段（包含"净额"、"流入"、"流出"等关键词）
-                            if any(keyword in col for keyword in ['净额', '流入', '流出', '成交额', '金额']):
-                                # 金额类字段：转换为亿元或万元
-                                display_fund[col] = display_fund[col].apply(
-                                    lambda x: f"{x/100000000:.2f}亿" if pd.notna(x) and abs(x) >= 100000000 
-                                    else f"{x/10000:.2f}万" if pd.notna(x) and abs(x) >= 10000
-                                    else f"{x:.2f}" if pd.notna(x) else "N/A"
-                                )
-                            elif '占比' in col or '比例' in col or '率' in col:
-                                # 百分比类字段
-                                display_fund[col] = display_fund[col].apply(
-                                    lambda x: f"{x:.2f}%" if pd.notna(x) else "N/A"
-                                )
-                            else:
-                                # 其他数值字段：保留2位小数
-                                display_fund[col] = display_fund[col].apply(
-                                    lambda x: f"{x:.2f}" if pd.notna(x) else "N/A"
-                                )
-                    
-                    # 显示所有列（全部内容）
-                    st.dataframe(display_fund, use_container_width=True, height=400)
+                for retry in range(max_retries):
+                    try:
+                        # 使用 stock_fund_flow_individual 接口获取所有股票的即时资金流数据
+                        df_all_fund = ak.stock_fund_flow_individual(symbol="即时")
+                        break  # 成功获取，跳出重试循环
+                    except Exception as e:
+                        if retry < max_retries - 1:
+                            st.warning(f"⚠️ 获取即时资金流数据失败，{retry_delay}秒后重试... ({retry + 1}/{max_retries})")
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # 指数退避
+                        else:
+                            raise e
             
-            except Exception as e:
-                st.error(f"❌ 获取个股资金流数据失败: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+            if df_all_fund is None or df_all_fund.empty:
+                st.warning(f"⚠️ 获取资金流数据失败")
+            else:
+                # 解析金额字符串（如 "7.60亿" -> 760000000）
+                def parse_amount_str(amount_str):
+                    """解析金额字符串，如 '7.60亿' -> 760000000, '16.31亿' -> 1631000000"""
+                    if pd.isna(amount_str) or amount_str == '' or amount_str == '-':
+                        return 0
+                    try:
+                        amount_str = str(amount_str).strip()
+                        if '亿' in amount_str:
+                            value = float(amount_str.replace('亿', ''))
+                            return int(value * 100000000)
+                        elif '万' in amount_str:
+                            value = float(amount_str.replace('万', ''))
+                            return int(value * 10000)
+                        else:
+                            return float(amount_str)
+                    except:
+                        return 0
+                
+                # 解析百分比字符串（如 "151.12%" -> 151.12）
+                def parse_percent_str(percent_str):
+                    """解析百分比字符串，如 '151.12%' -> 151.12"""
+                    if pd.isna(percent_str) or percent_str == '' or percent_str == '-':
+                        return 0
+                    try:
+                        percent_str = str(percent_str).strip().replace('%', '')
+                        return float(percent_str)
+                    except:
+                        return 0
+                
+                # 处理数据：添加数值列用于排序
+                df_display = df_all_fund.copy()
+                
+                # 如果输入了股票代码，进行筛选
+                if stock_code:
+                    stock_code_6digit = stock_code.zfill(6)
+                    if '股票代码' in df_display.columns:
+                        df_display = df_display[df_display['股票代码'].astype(str).str.zfill(6) == stock_code_6digit].copy()
+                    else:
+                        df_display = pd.DataFrame()
+                    
+                    if df_display.empty:
+                        st.warning(f"⚠️ 未找到股票代码 {stock_code} 的资金流数据（该股票可能不在当前排行中）")
+                        st.stop()
+                
+                # 添加数值列用于排序
+                if '净额' in df_display.columns:
+                    df_display['_净额数值'] = df_display['净额'].apply(parse_amount_str)
+                if '流入资金' in df_display.columns:
+                    df_display['_流入资金数值'] = df_display['流入资金'].apply(parse_amount_str)
+                if '流出资金' in df_display.columns:
+                    df_display['_流出资金数值'] = df_display['流出资金'].apply(parse_amount_str)
+                if '成交额' in df_display.columns:
+                    df_display['_成交额数值'] = df_display['成交额'].apply(parse_amount_str)
+                
+                # 根据排序选项排序
+                if sort_option == '净流入降序' and '_净额数值' in df_display.columns:
+                    df_display = df_display.sort_values('_净额数值', ascending=False)
+                elif sort_option == '净流入升序' and '_净额数值' in df_display.columns:
+                    df_display = df_display.sort_values('_净额数值', ascending=True)
+                elif sort_option == '流入资金降序' and '_流入资金数值' in df_display.columns:
+                    df_display = df_display.sort_values('_流入资金数值', ascending=False)
+                elif sort_option == '流出资金降序' and '_流出资金数值' in df_display.columns:
+                    df_display = df_display.sort_values('_流出资金数值', ascending=False)
+                elif sort_option == '成交额降序' and '_成交额数值' in df_display.columns:
+                    df_display = df_display.sort_values('_成交额数值', ascending=False)
+                
+                # 移除临时数值列
+                df_display = df_display.drop(columns=[col for col in df_display.columns if col.startswith('_')], errors='ignore')
+                
+                # 统计信息
+                total_count = len(df_display)
+                if total_count > 0:
+                    # 计算总净流入（需要重新解析）
+                    total_net = sum([parse_amount_str(row.get('净额', 0)) for _, row in df_display.iterrows()])
+                    total_inflow = sum([parse_amount_str(row.get('流入资金', 0)) for _, row in df_display.iterrows()])
+                    total_outflow = sum([parse_amount_str(row.get('流出资金', 0)) for _, row in df_display.iterrows()])
+                    
+                    # 显示统计卡片
+                    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                    
+                    with col_stat1:
+                        st.metric("📊 股票数量", f"{total_count}")
+                    
+                    with col_stat2:
+                        st.metric(
+                            "💰 总净流入",
+                            f"{total_net/100000000:.2f}亿" if abs(total_net) >= 100000000 else f"{total_net/10000:.2f}万",
+                            delta_color="normal" if total_net >= 0 else "inverse"
+                        )
+                    
+                    with col_stat3:
+                        st.metric(
+                            "📈 总流入",
+                            f"{total_inflow/100000000:.2f}亿" if abs(total_inflow) >= 100000000 else f"{total_inflow/10000:.2f}万"
+                        )
+                    
+                    with col_stat4:
+                        st.metric(
+                            "📉 总流出",
+                            f"{total_outflow/100000000:.2f}亿" if abs(total_outflow) >= 100000000 else f"{total_outflow/10000:.2f}万"
+                        )
+                
+                # 显示数据表格（带分页）
+                st.markdown("#### 📋 完整数据")
+                
+                # 选择要显示的列（排除序号列）
+                display_columns = [col for col in df_display.columns if col != '序号']
+                df_display = df_display[display_columns]
+                
+                # 显示前20条记录
+                df_display = df_display.head(20)
+                st.dataframe(df_display, use_container_width=True, height=400)
+        
+        except Exception as e:
+            st.error(f"❌ 获取个股资金流数据失败: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
     
         # ========== 数据更新时间 ==========
         st.markdown("---")

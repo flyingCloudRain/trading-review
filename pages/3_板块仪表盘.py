@@ -36,60 +36,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 页面标题 - 使用更大的样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    .stMetric {
-        background-color: transparent !important;
-        padding: 0.5rem 0 !important;
-        border: none !important;
-    }
-    .stMetric > div {
-        background-color: transparent !important;
-    }
-    /* 优化按钮样式 */
-    .stButton > button {
-        border-radius: 6px;
-        transition: all 0.3s ease;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    /* 优化输入框样式 */
-    .stTextInput > div > div > input {
-        border-radius: 6px;
-    }
-    /* 移除板块统计的背景色 */
-    .stMetric {
-        background-color: transparent !important;
-        border: none !important;
-        padding: 0.5rem 0 !important;
-    }
-    .stMetric > div {
-        background-color: transparent !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 # 页面标题
 st.markdown('<h1 class="main-header">📊 板块分析</h1>', unsafe_allow_html=True)
@@ -586,6 +535,8 @@ if '板块类型' in df_display.columns:
             cols.append(col)
     df_display = df_display[cols]
 
+# 显示前20条记录
+df_display = df_display.head(20)
 st.dataframe(df_display, use_container_width=True, height=400)
 
 # ==================== 标签页2: 趋势分析 ====================

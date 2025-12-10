@@ -71,30 +71,9 @@ if not DB_AVAILABLE:
     st.code(DB_ERROR, language="text")
     st.stop()
 
-# 页面标题样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 # 页面标题
 st.markdown('<h1 class="main-header">📊 指数信息</h1>', unsafe_allow_html=True)
@@ -172,22 +151,75 @@ try:
     # 统计信息
     st.markdown('<h2 class="section-header">📈 指数统计</h2>', unsafe_allow_html=True)
     
+    # 计算统计数据
+    total_count = len(df_display)
+    up_count = len(df_display[df_display['涨跌幅(%)'] > 0]) if '涨跌幅(%)' in df_display.columns else 0
+    down_count = len(df_display[df_display['涨跌幅(%)'] < 0]) if '涨跌幅(%)' in df_display.columns else 0
+    flat_count = len(df_display[df_display['涨跌幅(%)'] == 0]) if '涨跌幅(%)' in df_display.columns else 0
+    
+    up_ratio = (up_count/total_count*100) if total_count > 0 else 0
+    down_ratio = (down_count/total_count*100) if total_count > 0 else 0
+    
+    # 使用自定义HTML卡片显示统计信息（带背景色）
     col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        total_count = len(df_display)
-        st.metric("📊 指数总数", total_count)
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        ">
+            <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">📊 指数总数</div>
+            <div style="font-size: 1.5rem; font-weight: 700;">{total_count}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        up_count = len(df_display[df_display['涨跌幅(%)'] > 0]) if '涨跌幅(%)' in df_display.columns else 0
-        st.metric("📈 上涨指数", up_count, delta=f"{up_count/total_count*100:.1f}%" if total_count > 0 else "0%")
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            padding: 1rem;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        ">
+            <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">📈 上涨指数</div>
+            <div style="font-size: 1.5rem; font-weight: 700;">{up_count}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 0.2rem;">{up_ratio:.1f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
-        down_count = len(df_display[df_display['涨跌幅(%)'] < 0]) if '涨跌幅(%)' in df_display.columns else 0
-        st.metric("📉 下跌指数", down_count, delta=f"{down_count/total_count*100:.1f}%" if total_count > 0 else "0%")
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 1rem;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        ">
+            <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">📉 下跌指数</div>
+            <div style="font-size: 1.5rem; font-weight: 700;">{down_count}</div>
+            <div style="font-size: 0.85rem; opacity: 0.9; margin-top: 0.2rem;">{down_ratio:.1f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     with col4:
-        flat_count = len(df_display[df_display['涨跌幅(%)'] == 0]) if '涨跌幅(%)' in df_display.columns else 0
-        st.metric("➡️ 平盘指数", flat_count)
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            padding: 1rem;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        ">
+            <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">➡️ 平盘指数</div>
+            <div style="font-size: 1.5rem; font-weight: 700;">{flat_count}</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     # 重点指数统计
     focused_indices_codes = get_focused_indices()
@@ -219,28 +251,51 @@ try:
             index_down = len([i for i in focused_indices_data if i.get('changePercent', 0) < 0])
             index_flat = index_total - index_up - index_down
             
+            # 使用自定义HTML卡片显示重点指数统计（带背景色）
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric(
-                    "📈 上涨指数",
-                    f"{index_up}",
-                    delta=f"{index_up - index_down}" if index_up > index_down else None,
-                    help="重点指数中上涨的数量"
-                )
+                delta_text = f"+{index_up - index_down}" if index_up > index_down else ""
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+                    padding: 1rem;
+                    border-radius: 8px;
+                    color: white;
+                    text-align: center;
+                ">
+                    <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">📈 上涨指数</div>
+                    <div style="font-size: 1.5rem; font-weight: 700;">{index_up}</div>
+                    {f'<div style="font-size: 0.85rem; opacity: 0.9; margin-top: 0.2rem;">{delta_text}</div>' if delta_text else ''}
+                </div>
+                """, unsafe_allow_html=True)
             with col2:
-                st.metric(
-                    "📉 下跌指数",
-                    f"{index_down}",
-                    delta=f"{index_down - index_up}" if index_down > index_up else None,
-                    delta_color="inverse",
-                    help="重点指数中下跌的数量"
-                )
+                delta_text = f"+{index_down - index_up}" if index_down > index_up else ""
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+                    padding: 1rem;
+                    border-radius: 8px;
+                    color: white;
+                    text-align: center;
+                ">
+                    <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">📉 下跌指数</div>
+                    <div style="font-size: 1.5rem; font-weight: 700;">{index_down}</div>
+                    {f'<div style="font-size: 0.85rem; opacity: 0.9; margin-top: 0.2rem;">{delta_text}</div>' if delta_text else ''}
+                </div>
+                """, unsafe_allow_html=True)
             with col3:
-                st.metric(
-                    "➡️ 平盘指数",
-                    f"{index_flat}",
-                    help="重点指数中平盘的数量"
-                )
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+                    padding: 1rem;
+                    border-radius: 8px;
+                    color: white;
+                    text-align: center;
+                ">
+                    <div style="font-size: 0.8rem; opacity: 0.9; margin-bottom: 0.3rem;">➡️ 平盘指数</div>
+                    <div style="font-size: 1.5rem; font-weight: 700;">{index_flat}</div>
+                </div>
+                """, unsafe_allow_html=True)
             
             # 重点指数涨跌幅表格
             df_focused_indices = pd.DataFrame(focused_indices_data)
@@ -550,8 +605,9 @@ try:
         else:
             st.warning(f"⚠️ 未找到包含 '{search_term}' 的指数数据")
     
-    # 显示数据表格（显示过滤后的数据，不限制高度）
+    # 显示前20条记录
     if len(df_filtered) > 0:
+        df_filtered = df_filtered.head(20)
         st.dataframe(df_filtered, use_container_width=True)
         
         # 下载按钮（下载过滤后的数据）

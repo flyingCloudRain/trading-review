@@ -27,27 +27,9 @@ st.set_page_config(
 )
 
 # 页面标题样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2.5rem;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 st.markdown('<h1 class="main-header">📊 个股表现</h1>', unsafe_allow_html=True)
 

@@ -28,30 +28,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 页面标题样式
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1.5rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 3px solid #1f77b4;
-    }
-    /* 统一二级标题样式 - 无背景色 */
-    .section-header {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-top: 2rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e0e0e0;
-        background: transparent;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 应用统一样式
+from utils.page_styles import apply_common_styles
+apply_common_styles()
 
 # 页面标题
 st.markdown('<h1 class="main-header">📈 涨停股票池</h1>', unsafe_allow_html=True)
@@ -564,7 +543,8 @@ try:
         # 重命名列
         df_display = df_display.rename(columns=column_mapping)
         
-        # 显示数据表格（显示全部数据，不限制高度）
+        # 显示前20条记录
+        df_display = df_display.head(20)
         st.dataframe(df_display, use_container_width=True)
         
         # 下载按钮
