@@ -134,15 +134,6 @@ except:
 col_cal_header1, col_cal_header2 = st.columns([3, 1])
 with col_cal_header1:
     st.markdown('<h2 class="section-header">日历视图</h2>', unsafe_allow_html=True)
-with col_cal_header2:
-    if st.button("跳转到今天", use_container_width=True):
-        today = get_utc8_date()
-        st.session_state['selected_calendar_date'] = today
-        # 如果今天不在当前月份，切换到当前月份
-        if today.year != year or today.month != month:
-            st.session_state['selected_month'] = (today.year, today.month)
-        st.rerun()
-
 # 获取选中日期的详细信息
 selected_date = st.session_state.get('selected_calendar_date', None)
 today = get_utc8_date()

@@ -233,7 +233,7 @@ def _ensure_sector_type_column():
         # 不抛出异常，允许应用继续运行
 
 def _ensure_trading_reviews_columns():
-    """确保 trading_reviews 表有止盈止损列和市场列，并将review列改为可空（向后兼容）"""
+    """确保 trading_reviews 表有所有必需的列（向后兼容）"""
     try:
         db = SessionLocal()
         try:
@@ -242,7 +242,7 @@ def _ensure_trading_reviews_columns():
                 SELECT column_name, is_nullable
                 FROM information_schema.columns 
                 WHERE table_name = 'trading_reviews' 
-                AND column_name IN ('take_profit_price', 'stop_loss_price', 'market', 'review')
+                AND column_name IN ('take_profit_price', 'stop_loss_price', 'market', 'review', 'parent_id', 'trade_group_id')
             """)
             result = db.execute(check_sql).fetchall()
             existing_columns = {row[0]: row[1] for row in result}
@@ -317,6 +317,93 @@ def _ensure_trading_reviews_columns():
                 db.commit()
                 
                 print("✅ 已为 trading_reviews 表添加 market 列")
+            
+            # 添加 parent_id 列（如果不存在）
+            if 'parent_id' not in existing_columns:
+                alter_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ADD COLUMN parent_id INTEGER
+                """)
+                db.execute(alter_sql)
+                db.commit()
+                
+                # 添加外键约束
+                try:
+                    fk_sql = text("""
+                        ALTER TABLE trading_reviews 
+                        ADD CONSTRAINT fk_trading_reviews_parent 
+                        FOREIGN KEY (parent_id) REFERENCES trading_reviews(id)
+                    """)
+                    db.execute(fk_sql)
+                    db.commit()
+                except Exception as e:
+                    print(f"⚠️  添加 parent_id 外键约束时出错（可能已存在）: {e}")
+                    db.rollback()
+                
+                # 创建索引
+                try:
+                    index_sql = text("""
+                        CREATE INDEX IF NOT EXISTS idx_trading_reviews_parent_id 
+                        ON trading_reviews(parent_id)
+                    """)
+                    db.execute(index_sql)
+                    db.commit()
+                except Exception as e:
+                    print(f"⚠️  创建 parent_id 索引时出错（可能已存在）: {e}")
+                
+                print("✅ 已为 trading_reviews 表添加 parent_id 列")
+            
+            # 添加 trade_group_id 列（如果不存在）
+            if 'trade_group_id' not in existing_columns:
+                alter_sql = text("""
+                    ALTER TABLE trading_reviews 
+                    ADD COLUMN trade_group_id INTEGER
+                """)
+                db.execute(alter_sql)
+                db.commit()
+                
+                # 创建索引
+                try:
+                    index_sql = text("""
+                        CREATE INDEX IF NOT EXISTS idx_trading_reviews_trade_group_id 
+                        ON trading_reviews(trade_group_id)
+                    """)
+                    db.execute(index_sql)
+                    db.commit()
+                except Exception as e:
+                    print(f"⚠️  创建 trade_group_id 索引时出错（可能已存在）: {e}")
+                
+                print("✅ 已为 trading_reviews 表添加 trade_group_id 列")
+                
+                # 为现有数据生成 trade_group_id（基于股票代码和名称）
+                try:
+                    update_group_sql = text("""
+                        WITH ranked_reviews AS (
+                            SELECT 
+                                id,
+                                stock_code,
+                                stock_name,
+                                ROW_NUMBER() OVER (PARTITION BY stock_code, stock_name ORDER BY date ASC, created_at ASC) as rn
+                            FROM trading_reviews
+                            WHERE trade_group_id IS NULL
+                        ),
+                        group_ids AS (
+                            SELECT 
+                                id,
+                                DENSE_RANK() OVER (ORDER BY stock_code, stock_name, rn) as new_group_id
+                            FROM ranked_reviews
+                        )
+                        UPDATE trading_reviews tr
+                        SET trade_group_id = gi.new_group_id
+                        FROM group_ids gi
+                        WHERE tr.id = gi.id
+                    """)
+                    db.execute(update_group_sql)
+                    db.commit()
+                    print("✅ 已为现有数据生成 trade_group_id")
+                except Exception as e:
+                    print(f"⚠️  为现有数据生成 trade_group_id 时出错: {e}")
+                    db.rollback()
         finally:
             db.close()
     except Exception as e:

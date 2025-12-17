@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, CheckConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, CheckConstraint, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database.db import Base
 
@@ -21,8 +22,16 @@ class TradingReview(Base):
     profit_percent = Column(Float, nullable=True, comment='盈亏比例')
     take_profit_price = Column(Float, nullable=True, comment='止盈价格')
     stop_loss_price = Column(Float, nullable=True, comment='止损价格')
+    
+    # 关联字段：用于关联买入和卖出记录
+    parent_id = Column(Integer, ForeignKey('trading_reviews.id'), nullable=True, index=True, comment='父记录ID（卖出记录关联对应的买入记录）')
+    trade_group_id = Column(Integer, nullable=True, index=True, comment='交易组ID（同一只股票的多次买卖归为一组）')
+    
     created_at = Column(DateTime, server_default=func.now(), comment='创建时间')
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), comment='更新时间')
+    
+    # 关系定义
+    parent = relationship('TradingReview', remote_side=[id], backref='children')
     
     __table_args__ = (
         CheckConstraint("operation IN ('buy', 'sell')", name='check_operation'),
@@ -48,6 +57,8 @@ class TradingReview(Base):
             'profitPercent': self.profit_percent,
             'takeProfitPrice': self.take_profit_price,
             'stopLossPrice': self.stop_loss_price,
+            'parentId': self.parent_id,
+            'tradeGroupId': self.trade_group_id,
             'createdAt': self.created_at.isoformat() if self.created_at else None,
             'updatedAt': self.updated_at.isoformat() if self.updated_at else None,
         }

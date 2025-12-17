@@ -17,6 +17,8 @@ sys.path.insert(0, str(project_root))
 try:
     from database.db import SessionLocal
     from services.trading_review_service import TradingReviewService
+    from models.trading_review import TradingReview
+    from sqlalchemy import func
     from utils.time_utils import get_utc8_date
     from utils.trading_reasons import (
         get_trading_reasons,
@@ -66,6 +68,8 @@ except Exception as e:
 # 初始化session state
 if 'refresh_logs' not in st.session_state:
     st.session_state.refresh_logs = False
+if 'form_reset_counter' not in st.session_state:
+    st.session_state.form_reset_counter = 0
 
 # 使用标签页组织功能
 tab1, tab2, tab3, tab4 = st.tabs(["📋 交易记录", "➕ 添加记录", "📊 统计分析", "⚙️ 交易原因管理"])
@@ -153,96 +157,403 @@ with tab1:
             
             # 显示交易记录表格
             if filtered_reviews:
-                # 准备数据
+                # 初始化session state
+                if 'action_record_id' not in st.session_state:
+                    st.session_state.action_record_id = None
+                if 'action_type' not in st.session_state:
+                    st.session_state.action_type = None
+                
+                # 准备数据并显示表格（保持原始数据类型以便编辑）
                 records_data = []
                 for review in filtered_reviews:
+                    # 处理日期：确保是date对象
+                    if isinstance(review.date, str):
+                        try:
+                            review_date = datetime.strptime(review.date, '%Y-%m-%d').date()
+                        except:
+                            review_date = review.date
+                    else:
+                        review_date = review.date
+                    
                     record_dict = {
                         'ID': review.id,
-                        '日期': review.date,
+                        '日期': review_date,
                         '市场': getattr(review, 'market', 'A股'),
-                        '股票代码': review.stock_code,
-                        '股票名称': review.stock_name,
+                        '股票代码': review.stock_code or "",
+                        '股票名称': review.stock_name or "",
                         '操作': '买入' if review.operation == 'buy' else '卖出',
-                        '价格': f"{review.price:.2f}" if review.price is not None else "-",
-                        '数量': review.quantity if review.quantity is not None else "-",
-                        '总金额': f"{review.total_amount:.2f}" if review.total_amount is not None else "-",
-                        '盈亏': f"{review.profit:.2f}" if review.profit is not None else "-",
-                        '盈亏比例': f"{review.profit_percent:.2f}%" if review.profit_percent is not None else "-",
+                        '价格': float(review.price) if review.price is not None else None,
+                        '数量': int(review.quantity) if review.quantity is not None else None,
+                        '总金额': float(review.total_amount) if review.total_amount is not None else None,
+                        '盈亏': float(review.profit) if review.profit is not None else None,
+                        '盈亏比例': f"{review.profit_percent:.2f}%" if review.profit_percent is not None else "",
                     }
                     # 买入时显示止盈止损
                     if review.operation == 'buy':
-                        record_dict['止盈价'] = f"{review.take_profit_price:.2f}" if review.take_profit_price is not None else "-"
-                        record_dict['止损价'] = f"{review.stop_loss_price:.2f}" if review.stop_loss_price is not None else "-"
+                        record_dict['止盈价'] = float(review.take_profit_price) if review.take_profit_price is not None else None
+                        record_dict['止损价'] = float(review.stop_loss_price) if review.stop_loss_price is not None else None
+                    else:
+                        record_dict['止盈价'] = None
+                        record_dict['止损价'] = None
+                    
+                    # 添加关联信息
+                    relation_info = ""
+                    if review.parent_id:
+                        relation_info = f"↗️ 关联买入#{review.parent_id}"
+                    elif review.operation == 'buy':
+                        # 查找关联的卖出记录数量
+                        children_count = len([r for r in filtered_reviews if getattr(r, 'parent_id', None) == review.id])
+                        if children_count > 0:
+                            relation_info = f"↘️ {children_count}笔卖出"
+                    
                     record_dict.update({
-                        '交易原因': review.reason[:50] + '...' if len(review.reason) > 50 else review.reason,
-                        '复盘总结': review.review[:50] + '...' if review.review and len(review.review) > 50 else (review.review if review.review else '-'),
+                        '交易原因': review.reason or "",
+                        '复盘总结': review.review or "",
+                        '关联': relation_info,
                         '创建时间': review.created_at.strftime('%Y-%m-%d %H:%M:%S') if review.created_at else '-'
                     })
                     records_data.append(record_dict)
                 
                 df_records = pd.DataFrame(records_data)
                 
-                # 使用可编辑的DataFrame显示（只读模式）
-                st.dataframe(
+                # 保存原始数据用于比较
+                if 'original_df_records' not in st.session_state:
+                    st.session_state.original_df_records = df_records.copy()
+                
+                # 使用 data_editor 支持行选择和直接编辑
+                try:
+                    # 定义可编辑的列（某些列如ID、创建时间等不应编辑）
+                    column_config = {
+                        "ID": st.column_config.NumberColumn("ID", disabled=True),
+                        "日期": st.column_config.DateColumn("日期", format="YYYY-MM-DD"),
+                        "市场": st.column_config.SelectboxColumn("市场", options=['A股', '美股']),
+                        "股票代码": st.column_config.TextColumn("股票代码"),
+                        "股票名称": st.column_config.TextColumn("股票名称"),
+                        "操作": st.column_config.SelectboxColumn("操作", options=['买入', '卖出']),
+                        "价格": st.column_config.NumberColumn("价格", min_value=0.01, step=0.01, format="%.2f"),
+                        "数量": st.column_config.NumberColumn("数量", min_value=1, step=100),
+                        "总金额": st.column_config.NumberColumn("总金额", min_value=0, step=0.01, format="%.2f"),
+                        "盈亏": st.column_config.NumberColumn("盈亏", step=0.01, format="%.2f"),
+                        "盈亏比例": st.column_config.TextColumn("盈亏比例"),
+                        "止盈价": st.column_config.NumberColumn("止盈价", min_value=0.01, step=0.01, format="%.2f"),
+                        "止损价": st.column_config.NumberColumn("止损价", min_value=0.01, step=0.01, format="%.2f"),
+                        "交易原因": st.column_config.TextColumn("交易原因"),
+                        "复盘总结": st.column_config.TextColumn("复盘总结"),
+                        "关联": st.column_config.TextColumn("关联", disabled=True),
+                        "创建时间": st.column_config.TextColumn("创建时间", disabled=True),
+                    }
+                    
+                    edited_df = st.data_editor(
+                        df_records,
+                        use_container_width=True,
+                        height=400,
+                        hide_index=True,
+                        column_config=column_config,
+                        on_select="rerun",  # 选择时自动刷新
+                        selection_mode="single-row",  # 单选模式
+                        num_rows="fixed",  # 固定行数，不允许添加/删除行
+                        key="records_dataframe_editor"
+                    )
+                    
+                    # 检测数据变化并保存
+                    if not edited_df.equals(st.session_state.original_df_records):
+                        # 找出被修改的行
+                        for idx, row in edited_df.iterrows():
+                            original_row = st.session_state.original_df_records.iloc[idx]
+                            
+                            # 检查是否有变化
+                            if not row.equals(original_row):
+                                if idx < len(filtered_reviews):
+                                    review = filtered_reviews[idx]
+                                    
+                                    # 准备更新数据
+                                    update_data = {}
+                                    
+                                    # 处理日期
+                                    if pd.notna(row.get('日期')) and str(row['日期']) != str(original_row.get('日期')):
+                                        if isinstance(row['日期'], str):
+                                            update_data['date'] = row['日期']
+                                        else:
+                                            update_data['date'] = row['日期'].strftime('%Y-%m-%d')
+                                    
+                                    # 处理市场
+                                    if row.get('市场') != original_row.get('市场'):
+                                        update_data['market'] = row['市场']
+                                    
+                                    # 处理股票代码和名称
+                                    if row.get('股票代码') != original_row.get('股票代码'):
+                                        update_data['stockCode'] = str(row['股票代码']) if pd.notna(row.get('股票代码')) else ""
+                                    if row.get('股票名称') != original_row.get('股票名称'):
+                                        update_data['stockName'] = str(row['股票名称']) if pd.notna(row.get('股票名称')) else ""
+                                    
+                                    # 处理操作类型
+                                    if row.get('操作') != original_row.get('操作'):
+                                        update_data['operation'] = 'buy' if row['操作'] == '买入' else 'sell'
+                                    
+                                    # 处理价格和数量
+                                    if pd.notna(row.get('价格')) and row.get('价格') != original_row.get('价格'):
+                                        try:
+                                            update_data['price'] = float(row['价格'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    if pd.notna(row.get('数量')) and row.get('数量') != original_row.get('数量'):
+                                        try:
+                                            update_data['quantity'] = int(row['数量'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # 处理总金额（如果价格和数量都更新了，会自动计算）
+                                    if 'price' in update_data and 'quantity' in update_data:
+                                        update_data['totalAmount'] = update_data['price'] * update_data['quantity']
+                                    elif pd.notna(row.get('总金额')) and row.get('总金额') != original_row.get('总金额'):
+                                        try:
+                                            update_data['totalAmount'] = float(row['总金额'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # 处理盈亏
+                                    if pd.notna(row.get('盈亏')) and row.get('盈亏') != original_row.get('盈亏'):
+                                        try:
+                                            update_data['profit'] = float(row['盈亏'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # 处理盈亏比例
+                                    if row.get('盈亏比例') != original_row.get('盈亏比例'):
+                                        profit_percent_str = str(row['盈亏比例']).replace('%', '').strip()
+                                        try:
+                                            update_data['profitPercent'] = float(profit_percent_str)
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # 处理止盈止损
+                                    if pd.notna(row.get('止盈价')) and row.get('止盈价') != original_row.get('止盈价'):
+                                        try:
+                                            update_data['takeProfitPrice'] = float(row['止盈价'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    if pd.notna(row.get('止损价')) and row.get('止损价') != original_row.get('止损价'):
+                                        try:
+                                            update_data['stopLossPrice'] = float(row['止损价'])
+                                        except (ValueError, TypeError):
+                                            pass
+                                    
+                                    # 处理交易原因和复盘总结
+                                    if row.get('交易原因') != original_row.get('交易原因'):
+                                        update_data['reason'] = str(row['交易原因']) if pd.notna(row.get('交易原因')) else None
+                                    
+                                    if row.get('复盘总结') != original_row.get('复盘总结'):
+                                        update_data['review'] = str(row['复盘总结']) if pd.notna(row.get('复盘总结')) and str(row['复盘总结']).strip() else None
+                                    
+                                    # 如果有更新，保存到数据库
+                                    if update_data:
+                                        try:
+                                            updated_review = TradingReviewService.update_review(db, review.id, update_data)
+                                            if updated_review:
+                                                st.success(f"✅ 已更新记录: **{review.stock_name}** (ID: {review.id})")
+                                                st.session_state.original_df_records = edited_df.copy()
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ 更新失败: **{review.stock_name}** (ID: {review.id})")
+                                        except Exception as e:
+                                            st.error(f"❌ 更新失败: {str(e)}")
+                    
+                    # 获取选中的行
+                    if 'records_dataframe_editor' in st.session_state:
+                        selection = st.session_state.records_dataframe_editor.get('selection', {})
+                        selected_rows = selection.get('rows', [])
+                        if selected_rows:
+                            # 获取选中的行索引
+                            selected_row_index = selected_rows[0]
+                            if selected_row_index < len(filtered_reviews):
+                                selected_review = filtered_reviews[selected_row_index]
+                                # 自动设置操作记录
+                                st.session_state.action_record_id = selected_review.id
+                                st.session_state.action_type = "view"
+                                
+                except Exception as e:
+                    # 如果 data_editor 不支持或出错，使用普通 dataframe
+                    st.dataframe(
                     df_records,
                     use_container_width=True,
                     height=400,
                     hide_index=True
                 )
+                    st.caption("💡 提示：点击表格下方的按钮可快速操作记录")
+                    if st.session_state.get('debug_mode', False):
+                        st.error(f"Data editor error: {str(e)}")
                 
-                # 详细操作区域
-                st.markdown('<h2 class="section-header">记录操作</h2>', unsafe_allow_html=True)
-                col_op1, col_op2 = st.columns([1, 1])
+                # 在表格下方显示操作按钮区域
+                st.markdown("#### 🔧 快速操作")
+                st.caption("💡 提示：点击下方按钮可快速查看、编辑或删除对应记录")
                 
-                with col_op1:
-                    # 查看/编辑记录
+                # 使用网格布局显示操作按钮（每行3条记录）
+                num_cols = 3
+                for i in range(0, len(filtered_reviews), num_cols):
+                    cols = st.columns(num_cols)
+                    for j, col in enumerate(cols):
+                        if i + j < len(filtered_reviews):
+                            review = filtered_reviews[i + j]
+                            with col:
+                                st.markdown(f"**{review.stock_name}** ({review.date})")
+                                col_btn1, col_btn2, col_btn3 = st.columns(3)
+                                with col_btn1:
+                                    if st.button("📄", key=f"view_{review.id}", help="查看详情", use_container_width=True):
+                                        st.session_state.action_record_id = review.id
+                                        st.session_state.action_type = "view"
+                                        st.rerun()
+                                with col_btn2:
+                                    if st.button("✏️", key=f"edit_{review.id}", help="编辑记录", use_container_width=True):
+                                        st.session_state.action_record_id = review.id
+                                        st.session_state.action_type = "edit"
+                                        st.rerun()
+                                with col_btn3:
+                                    if st.button("🗑️", key=f"delete_{review.id}", help="删除记录", use_container_width=True):
+                                        st.session_state.action_record_id = review.id
+                                        st.session_state.action_type = "delete"
+                                        st.rerun()
+                
+                # 详细操作区域 - 根据按钮点击显示
+                if st.session_state.get('action_record_id') and st.session_state.get('action_type'):
+                    st.markdownst.markdown('<h2 class="section-header">记录操作</h2>', unsafe_allow_html=True)
+                    selected_id = st.session_state.action_record_id
+                    action_type = st.session_state.action_type
+                    
+                    # 显示当前操作的记录信息
+                    current_review = next((r for r in filtered_reviews if r.id == selected_id), None)
+                    if current_review:
+                        st.info(f"📋 当前操作记录: **{current_review.stock_name}** ({current_review.date}) - {'买入' if current_review.operation == 'buy' else '卖出'}")
+                        
+                        # 添加返回按钮
+                        if st.button("← 返回列表", key="back_to_list"):
+                            st.session_state.action_record_id = None
+                            st.session_state.action_type = None
+                            st.rerun()
+                        
+                        # 根据操作类型显示对应内容
+                        if action_type == "view":
+                            # 查看详情
+                            selected_review = current_review
+                        elif action_type == "edit":
+                            # 编辑记录
+                            selected_review = current_review
+                        elif action_type == "delete":
+                            # 删除记录
+                            selected_review = current_review
+                    else:
+                        st.warning("⚠️ 未找到选中的记录")
+                        selected_id = None
+                else:
+                    # 如果没有选中操作，使用原来的选择框方式
+                    st.markdown('<h2 class="section-header">记录操作</h2>', unsafe_allow_html=True)
                     review_ids = [r.id for r in filtered_reviews]
                     selected_id = st.selectbox(
-                        "选择要查看/编辑的记录",
+                        "📋 选择要操作的记录",
                         options=review_ids,
-                        format_func=lambda x: f"ID: {x} - {next((r.stock_name for r in filtered_reviews if r.id == x), '')}",
-                        help="选择要查看或编辑的交易记录"
+                        format_func=lambda x: f"{next((r.stock_name for r in filtered_reviews if r.id == x), '')} ({next((r.date for r in filtered_reviews if r.id == x), '')}) - {next(('买入' if r.operation == 'buy' else '卖出' for r in filtered_reviews if r.id == x), '')}",
+                        help="选择要查看、编辑或删除的交易记录",
+                        key="selected_review_id"
                     )
+                    action_type = "view"  # 默认查看
                     
                     if selected_id:
                         selected_review = next((r for r in filtered_reviews if r.id == selected_id), None)
                         if selected_review:
-                            # 查看详细信息
-                            with st.expander("📄 查看详细信息", expanded=True):
-                                st.write(f"**日期:** {selected_review.date}")
+                            # 根据操作类型显示对应的标签页
+                            op_tab1, op_tab2, op_tab3 = st.tabs(["📄 查看详情", "✏️ 编辑记录", "🗑️ 删除记录"])
+                            view_tab, edit_tab, delete_tab = op_tab1, op_tab2, op_tab3
+                        
+                        # 标签页1: 查看详情
+                        with view_tab:
+                    
+                            # 显示记录基本信息卡片
+                            col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+                            with col_info1:
+                                # 使用自定义HTML显示日期
+                                date_str = str(selected_review.date) if selected_review.date else "-"
+                                st.markdown(f"""
+                                    <div style="padding: 1rem; background-color: #f0f2f6; border-radius: 0.5rem;">
+                                        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">📅 交易日期</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600; color: #1f2937;">{date_str}</div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                            with col_info2:
+                                operation_text = '买入' if selected_review.operation == 'buy' else '卖出'
+                                st.markdown(f"""
+                                    <div style="padding: 1rem; background-color: #f0f2f6; border-radius: 0.5rem;">
+                                        <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">📊 操作类型</div>
+                                        <div style="font-size: 1.25rem; font-weight: 600; color: #1f2937;">{operation_text}</div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                            with col_info3:
+                                if selected_review.total_amount is not None:
+                                    st.metric("💰 成交总额", float(selected_review.total_amount), delta=None, help="单位：元")
+                                else:
+                                    st.markdown(f"""
+                                        <div style="padding: 1rem; background-color: #f0f2f6; border-radius: 0.5rem;">
+                                            <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">💰 成交总额</div>
+                                            <div style="font-size: 1.25rem; font-weight: 600; color: #1f2937;">-</div>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+                            with col_info4:
+                                if selected_review.profit is not None:
+                                    profit_value = float(selected_review.profit)
+                                    profit_delta = f"{selected_review.profit_percent:.2f}%" if selected_review.profit_percent is not None else None
+                                    profit_color = "normal" if profit_value >= 0 else "inverse"
+                                    st.metric("📈 盈亏金额", profit_value, delta=profit_delta, delta_color=profit_color)
+                                else:
+                                    st.markdown(f"""
+                                        <div style="padding: 1rem; background-color: #f0f2f6; border-radius: 0.5rem;">
+                                            <div style="font-size: 0.875rem; color: #666; margin-bottom: 0.25rem;">📈 盈亏金额</div>
+                                            <div style="font-size: 1.25rem; font-weight: 600; color: #1f2937;">-</div>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+                            
+                            # 详细信息
+                            st.markdown("#### 📋 详细信息")
+                            col_detail1, col_detail2 = st.columns(2)
+                            
+                            with col_detail1:
                                 st.write(f"**市场:** {getattr(selected_review, 'market', 'A股')}")
                                 st.write(f"**股票代码:** {selected_review.stock_code}")
                                 st.write(f"**股票名称:** {selected_review.stock_name}")
-                                st.write(f"**操作类型:** {'买入' if selected_review.operation == 'buy' else '卖出'}")
                                 st.write(f"**交易原因:** {selected_review.reason}")
-                                st.write(f"**成交价格:** {selected_review.price:.2f}" if selected_review.price is not None else "**成交价格:** -")
+                                st.write(f"**成交价格:** {selected_review.price:.2f}元" if selected_review.price is not None else "**成交价格:** -")
                                 st.write(f"**成交数量:** {selected_review.quantity}" if selected_review.quantity is not None else "**成交数量:** -")
-                                st.write(f"**成交总额:** {selected_review.total_amount:.2f}" if selected_review.total_amount is not None else "**成交总额:** -")
-                                st.write(f"**盈亏金额:** {selected_review.profit:.2f}" if selected_review.profit is not None else "**盈亏金额:** -")
-                                st.write(f"**盈亏比例:** {selected_review.profit_percent:.2f}%" if selected_review.profit_percent is not None else "**盈亏比例:** -")
+                            
+                            with col_detail2:
                                 if selected_review.operation == 'buy':
-                                    st.write(f"**止盈价格:** {selected_review.take_profit_price:.2f}" if selected_review.take_profit_price is not None else "**止盈价格:** -")
-                                    st.write(f"**止损价格:** {selected_review.stop_loss_price:.2f}" if selected_review.stop_loss_price is not None else "**止损价格:** -")
-                                st.write(f"**复盘总结:** {selected_review.review if selected_review.review else '-'}")
+                                    st.write(f"**止盈价格:** {selected_review.take_profit_price:.2f}元" if selected_review.take_profit_price is not None else "**止盈价格:** -")
+                                    st.write(f"**止损价格:** {selected_review.stop_loss_price:.2f}元" if selected_review.stop_loss_price is not None else "**止损价格:** -")
                                 st.write(f"**创建时间:** {selected_review.created_at.strftime('%Y-%m-%d %H:%M:%S') if selected_review.created_at else '-'}")
                                 st.write(f"**更新时间:** {selected_review.updated_at.strftime('%Y-%m-%d %H:%M:%S') if selected_review.updated_at else '-'}")
                             
-                            # 编辑功能
-                            with st.expander("✏️ 编辑记录", expanded=False):
-                                with st.form(f"edit_review_{selected_id}"):
-                                    # 处理日期：可能是字符串或date对象
-                                    if isinstance(selected_review.date, str):
-                                        edit_date_value = datetime.strptime(selected_review.date, '%Y-%m-%d').date()
-                                    else:
-                                        edit_date_value = selected_review.date
-                                    
+                            if selected_review.review:
+                                st.markdown("#### 📝 复盘总结")
+                                st.text_area("", value=selected_review.review, height=100, disabled=True, key=f"view_review_{selected_id}")
+                        
+                        # 标签页2: 编辑记录
+                        with edit_tab:
+                            st.info("💡 修改以下信息后点击「保存修改」按钮保存更改")
+                            with st.form(f"edit_review_{selected_id}"):
+                                # 处理日期：可能是字符串或date对象
+                                if isinstance(selected_review.date, str):
+                                    edit_date_value = datetime.strptime(selected_review.date, '%Y-%m-%d').date()
+                                else:
+                                    edit_date_value = selected_review.date
+                                
+                                # 市场和日期放在同一行
+                                col_edit_date_market1, col_edit_date_market2 = st.columns(2)
+                                with col_edit_date_market1:
                                     edit_date = st.date_input(
                                         "📅 交易日期",
                                         value=edit_date_value,
                                         max_value=get_utc8_date(),
                                         key=f"edit_date_{selected_id}"
                                     )
-                                    
+                                with col_edit_date_market2:
                                     edit_market = st.selectbox(
                                         "🌍 市场",
                                         options=['A股', '美股'],
@@ -342,7 +653,7 @@ with tab1:
                                     )
                                     
                                     # 止盈止损信息（买入时显示）
-                                    if selected_review.operation == 'buy':
+                                if edit_operation == 'buy':
                                         st.markdown("---")
                                         st.markdown("#### 🎯 止盈止损设置")
                                         col_edit_tp_sl1, col_edit_tp_sl2 = st.columns(2)
@@ -375,20 +686,25 @@ with tab1:
                                             if edit_stop_loss_price:
                                                 sl_percent = ((edit_stop_loss_price - edit_price) / edit_price) * 100
                                                 st.info(f"💡 止损价格 {edit_stop_loss_price:.2f} 元，相对于买入价 {edit_price:.2f} 元，跌幅 {sl_percent:+.2f}%")
-                                    else:
+                                else:
                                         edit_take_profit_price = None
                                         edit_stop_loss_price = None
+                                
+                                # 复盘总结（无论操作类型如何都显示）
+                                edit_review = st.text_area(
+                                    "📝 复盘总结",
+                                    value=selected_review.review,
+                                    height=150,
+                                    key=f"edit_review_text_{selected_id}"
+                                )
                                     
-                                    edit_review = st.text_area(
-                                        "📝 复盘总结",
-                                        value=selected_review.review,
-                                        height=150,
-                                        key=f"edit_review_text_{selected_id}"
-                                    )
-                                    
+                                col_submit1, col_submit2 = st.columns([1, 1])
+                                with col_submit1:
                                     edit_submitted = st.form_submit_button("✅ 保存修改", type="primary", use_container_width=True)
+                                with col_submit2:
+                                    edit_cancel = st.form_submit_button("❌ 取消", use_container_width=True)
                                     
-                                    if edit_submitted:
+                                if edit_submitted and not edit_cancel:
                                         # 安全地处理可能为None的值
                                         edit_stock_code_trimmed = (edit_stock_code.strip() if edit_stock_code and isinstance(edit_stock_code, str) else "") or ""
                                         edit_stock_name_trimmed = (edit_stock_name.strip() if edit_stock_name and isinstance(edit_stock_name, str) else "") or ""
@@ -438,26 +754,55 @@ with tab1:
                                             except Exception as e:
                                                 st.error(f"❌ 更新失败: {str(e)}")
                 
-                with col_op2:
-                    # 删除记录
-                    st.markdown("### 删除记录")
-                    delete_id = st.selectbox(
-                        "选择要删除的记录",
-                        options=[''] + review_ids,
-                        format_func=lambda x: f"ID: {x} - {next((r.stock_name for r in filtered_reviews if r.id == x), '')}" if x else "请选择...",
-                        help="选择要删除的交易记录",
-                        key="delete_select"
-                    )
-                    
-                    if delete_id and delete_id != '':
-                        delete_review = next((r for r in filtered_reviews if r.id == delete_id), None)
-                        if delete_review:
-                            st.warning(f"⚠️ 将删除记录: {delete_review.stock_name} ({delete_review.date})")
-                            if st.button("🗑️ 确认删除", type="primary", key="confirm_delete"):
+                        # 标签页3: 删除记录
+                        with delete_tab:
+                            st.warning("⚠️ **危险操作：删除记录后无法恢复，请谨慎操作！**")
+                            
+                            # 显示要删除的记录信息
+                            st.markdown("#### 📋 将要删除的记录信息")
+                            col_del1, col_del2 = st.columns(2)
+                            
+                            with col_del1:
+                                st.write(f"**交易日期:** {selected_review.date}")
+                                st.write(f"**股票代码:** {selected_review.stock_code}")
+                                st.write(f"**股票名称:** {selected_review.stock_name}")
+                                st.write(f"**操作类型:** {'买入' if selected_review.operation == 'buy' else '卖出'}")
+                            
+                            with col_del2:
+                                st.write(f"**成交价格:** {selected_review.price:.2f}元" if selected_review.price else "-")
+                                st.write(f"**成交数量:** {selected_review.quantity}" if selected_review.quantity else "-")
+                                st.write(f"**成交总额:** {selected_review.total_amount:.2f}元" if selected_review.total_amount else "-")
+                                st.write(f"**交易原因:** {selected_review.reason}")
+                            
+                            # 二次确认
+                            st.markdown("---")
+                            confirm_text = st.text_input(
+                                "🔒 安全确认：请输入股票名称以确认删除",
+                                placeholder=f"请输入: {selected_review.stock_name}",
+                                key=f"delete_confirm_{selected_id}",
+                                help="请输入完整的股票名称以确认删除操作"
+                            )
+                            
+                            col_del_btn1, col_del_btn2 = st.columns([1, 1])
+                            with col_del_btn1:
+                                delete_confirmed = st.button(
+                                    "🗑️ 确认删除",
+                                    type="primary",
+                                    disabled=confirm_text != selected_review.stock_name,
+                                    use_container_width=True,
+                                    key=f"delete_btn_{selected_id}"
+                                )
+                            with col_del_btn2:
+                                delete_cancel = st.button(
+                                    "❌ 取消",
+                                    use_container_width=True,
+                                    key=f"delete_cancel_{selected_id}"
+                                )
+                            
+                            if delete_confirmed and confirm_text == selected_review.stock_name:
                                 try:
-                                    success = TradingReviewService.delete_review(db, delete_id)
+                                    success = TradingReviewService.delete_review(db, selected_id)
                                     if success:
-                                        # 显示 toast 提示
                                         st.toast("✅ 记录已删除", icon="🗑️")
                                         st.success("✅ 记录已删除")
                                         st.rerun()
@@ -465,6 +810,8 @@ with tab1:
                                         st.error("❌ 删除失败")
                                 except Exception as e:
                                     st.error(f"❌ 删除失败: {str(e)}")
+                            elif delete_confirmed and confirm_text != selected_review.stock_name:
+                                st.error("❌ 输入的股票名称不匹配，请重新输入")
             else:
                 st.info("🔍 没有找到匹配的交易记录")
     finally:
@@ -474,37 +821,49 @@ with tab1:
 with tab2:
     st.markdown('<h2 class="section-header">添加交易记录</h2>', unsafe_allow_html=True)
     
+    # 检查是否需要清除表单（通过增加key后缀来强制重置）
+    form_reset_counter = st.session_state.get('form_reset_counter', 0)
+    form_key_suffix = f"_{form_reset_counter}" if form_reset_counter > 0 else ""
+    
     with st.form("add_trading_review", clear_on_submit=False):
         col_form1, col_form2 = st.columns(2)
         
         with col_form1:
             # 基本信息
-            trading_date = st.date_input(
-                "交易日期",
+            # 日期和市场放在同一行
+            col_date_market1, col_date_market2 = st.columns(2)
+            with col_date_market1:
+                trading_date = st.date_input(
+                    "📅 交易日期",
                 value=get_utc8_date(),
                 max_value=get_utc8_date(),
-                help="选择交易日期"
+                    help="选择交易日期",
+                    key=f"add_trading_date{form_key_suffix}"
             )
-            
-            market = st.selectbox(
-                "市场",
+            with col_date_market2:
+                market = st.selectbox(
+                    "🌍 市场",
                 options=['A股', '美股'],
-                help="选择交易市场"
+                    help="选择交易市场",
+                    key=f"add_market{form_key_suffix}"
             )
-            
             # 股票代码和股票名称放在同一行
             col_stock1, col_stock2 = st.columns(2)
             with col_stock1:
                 stock_code = st.text_input(
                     "股票代码",
+                    value="",
                     placeholder="例如: 000001" if market == 'A股' else "例如: AAPL",
-                    help="输入股票代码"
+                    help="输入股票代码",
+                    key=f"add_stock_code{form_key_suffix}"
                 )
             with col_stock2:
                 stock_name = st.text_input(
                     "股票名称",
+                    value="",
                     placeholder="例如: 平安银行" if market == 'A股' else "例如: Apple Inc.",
-                    help="输入股票名称"
+                    help="输入股票名称",
+                    key=f"add_stock_name{form_key_suffix}"
                 )
             
             # 操作类型和交易原因放在同一行
@@ -514,7 +873,8 @@ with tab2:
                     "操作类型",
                     options=['buy', 'sell'],
                     format_func=lambda x: '买入' if x == 'buy' else '卖出',
-                    help="选择买入或卖出"
+                    help="选择买入或卖出",
+                    key=f"add_operation{form_key_suffix}"
                 )
             with col_op_reason2:
                 # 交易原因
@@ -522,8 +882,75 @@ with tab2:
                 reason = st.selectbox(
                     "交易原因",
                     options=trading_reasons,
-                    help="选择本次交易的原因，可在「交易原因管理」标签页中添加新的原因"
+                    help="选择本次交易的原因，可在「交易原因管理」标签页中添加新的原因",
+                    key=f"add_reason{form_key_suffix}"
                 )
+            
+            # 如果是卖出操作，显示可关联的买入记录选择
+            if operation == 'sell' and stock_code and stock_code.strip():
+                db_temp = SessionLocal()
+                try:
+                    # 查找同一只股票的买入记录
+                    buy_records = db_temp.query(TradingReview).filter(
+                        TradingReview.operation == 'buy',
+                        TradingReview.stock_code == stock_code.strip()
+                    ).order_by(TradingReview.date.desc(), TradingReview.created_at.desc()).all()
+                    
+                    if buy_records:
+                        # 计算每个买入记录的剩余可卖出数量
+                        buy_options = []
+                        buy_options_dict = {}
+                        
+                        for buy_record in buy_records:
+                            # 计算已卖出数量
+                            sold_quantity = db_temp.query(func.sum(TradingReview.quantity)).filter(
+                                TradingReview.parent_id == buy_record.id,
+                                TradingReview.operation == 'sell'
+                            ).scalar() or 0
+                            
+                            remaining = buy_record.quantity - sold_quantity
+                            
+                            if remaining > 0:
+                                option_text = f"买入#{buy_record.id} - {buy_record.date} | {buy_record.price:.2f}元 × {buy_record.quantity}股 | 剩余{remaining}股"
+                                buy_options.append(option_text)
+                                buy_options_dict[option_text] = buy_record.id
+                        
+                        if buy_options:
+                            st.markdown("#### 🔗 关联买入记录（可选）")
+                            st.caption("💡 选择要关联的买入记录，系统将自动计算盈亏。如果不选择，系统会自动匹配最早的未完全卖出的买入记录。")
+                            
+                            selected_buy_option = st.selectbox(
+                                "选择关联的买入记录",
+                                options=["自动匹配（推荐）"] + buy_options,
+                                help="选择要关联的买入记录，或选择'自动匹配'让系统自动选择",
+                                key=f"add_parent_buy{form_key_suffix}"
+                            )
+                            
+                            # 将选中的买入记录ID存储到session_state，以便在提交时使用
+                            if selected_buy_option != "自动匹配（推荐）" and selected_buy_option in buy_options_dict:
+                                st.session_state[f'selected_parent_id{form_key_suffix}'] = buy_options_dict[selected_buy_option]
+                            else:
+                                st.session_state[f'selected_parent_id{form_key_suffix}'] = None
+                                
+                                # 显示选中买入记录的详细信息
+                                selected_buy = next((r for r in buy_records if r.id == selected_parent_id), None)
+                                if selected_buy:
+                                    sold_qty = db_temp.query(func.sum(TradingReview.quantity)).filter(
+                                        TradingReview.parent_id == selected_buy.id,
+                                        TradingReview.operation == 'sell'
+                                    ).scalar() or 0
+                                    remaining_qty = selected_buy.quantity - sold_qty
+                                    
+                                    st.info(f"""
+                                    **选中的买入记录：**
+                                    - 买入日期：{selected_buy.date}
+                                    - 买入价格：{selected_buy.price:.2f} 元
+                                    - 买入数量：{selected_buy.quantity} 股
+                                    - 已卖出：{sold_qty} 股
+                                    - 剩余可卖：{remaining_qty} 股
+                                    """)
+                finally:
+                    db_temp.close()
         
         with col_form2:
             # 交易信息
@@ -537,7 +964,7 @@ with tab2:
                     step=0.01,
                     format="%.2f",
                     help="输入成交价格（元，必填）",
-                    key="add_price"
+                    key=f"add_price{form_key_suffix}"
                 )
             with col_price_qty2:
                 quantity = st.number_input(
@@ -546,7 +973,7 @@ with tab2:
                     value=None,
                     step=100,
                     help="输入成交数量（股，必填）",
-                    key="add_quantity"
+                    key=f"add_quantity{form_key_suffix}"
                 )
             
             # 自动计算总金额（如果价格和数量都提供了）
@@ -566,7 +993,8 @@ with tab2:
                     value=None,
                     step=0.01,
                     format="%.2f",
-                    help="盈亏金额（可选，卖出时填写）"
+                    help="盈亏金额（可选，卖出时填写）",
+                    key=f"add_profit{form_key_suffix}"
                 )
             with col_profit2:
                 profit_percent = st.number_input(
@@ -574,13 +1002,12 @@ with tab2:
                     value=None,
                     step=0.01,
                     format="%.2f",
-                    help="盈亏比例（可选，卖出时填写）"
+                    help="盈亏比例（可选，卖出时填写）",
+                    key=f"add_profit_percent{form_key_suffix}"
                 )
         
         # 止盈止损信息（买入时填写）
         if operation == 'buy':
-            st.markdown("---")
-            st.markdown("#### 止盈止损设置（买入时建议设置）")
             col_tp_sl1, col_tp_sl2 = st.columns(2)
             with col_tp_sl1:
                 take_profit_price = st.number_input(
@@ -589,7 +1016,8 @@ with tab2:
                     value=None,
                     step=0.01,
                     format="%.2f",
-                    help="止盈价格（可选，买入时建议设置）"
+                    help="止盈价格（可选，买入时建议设置）",
+                    key=f"add_take_profit_price{form_key_suffix}"
                 )
             with col_tp_sl2:
                 stop_loss_price = st.number_input(
@@ -598,7 +1026,8 @@ with tab2:
                     value=None,
                     step=0.01,
                     format="%.2f",
-                    help="止损价格（可选，买入时建议设置）"
+                    help="止损价格（可选，买入时建议设置）",
+                    key=f"add_stop_loss_price{form_key_suffix}"
                 )
             
             # 显示止盈止损比例提示
@@ -616,9 +1045,11 @@ with tab2:
         # 复盘总结
         review = st.text_area(
             "复盘总结",
+            value="",
             placeholder="请输入复盘总结，例如：交易执行情况、市场表现、经验教训等...",
             height=150,
-            help="对本次交易进行复盘总结"
+            help="对本次交易进行复盘总结",
+            key=f"add_review{form_key_suffix}"
         )
         
         # 提交按钮
@@ -677,6 +1108,15 @@ with tab2:
                     'stopLossPrice': float(stop_loss_price) if stop_loss_price is not None else None,
                 }
                 
+                # 如果选择了关联的买入记录，添加到数据中
+                if operation == 'sell':
+                    selected_parent_id = st.session_state.get(f'selected_parent_id{form_key_suffix}', None)
+                    if selected_parent_id:
+                        review_data['parentId'] = selected_parent_id
+                        # 清除session_state中的值
+                        if f'selected_parent_id{form_key_suffix}' in st.session_state:
+                            del st.session_state[f'selected_parent_id{form_key_suffix}']
+                
                 # 保存到数据库
                 db = SessionLocal()
                 try:
@@ -685,12 +1125,17 @@ with tab2:
                     st.toast(f"交易记录已添加！记录ID: {created_review.id}")
                     st.success(f"交易记录已添加！记录ID: {created_review.id}")
                     st.info("记录已保存，可在「交易记录」标签页查看")
+                    # 增加表单重置计数器，通过改变key来强制重置表单字段
+                    st.session_state.form_reset_counter = st.session_state.get('form_reset_counter', 0) + 1
+                    # 刷新页面以清除表单
+                    st.rerun()
                 except ValueError as e:
                     st.error(f"数据验证失败: {str(e)}")
                 except Exception as e:
                     st.error(f"保存失败: {str(e)}")
                 finally:
                     db.close()
+        
 
 # ==================== 标签页3: 统计分析 ====================
 with tab3:

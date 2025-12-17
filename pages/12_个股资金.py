@@ -218,8 +218,6 @@ try:
             with col_stat5:
                 st.metric("💵 总成交额", format_amount(total_turnover))
             
-            # ==================== 数据可视化 ====================
-            st.markdown('<h2 class="section-header">📈 数据可视化</h2>', unsafe_allow_html=True)
             
             # 准备图表数据（取前20名）
             df_chart = df.head(20).copy()

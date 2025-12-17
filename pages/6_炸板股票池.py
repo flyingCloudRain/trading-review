@@ -268,35 +268,6 @@ try:
                 top_explosions = top_explosions.rename(columns=col_mapping)
                 st.dataframe(top_explosions, use_container_width=True)
         
-        # 涨跌幅分布
-        if 'changePercent' in df.columns:
-            st.markdown("#### 📊 涨跌幅分布")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # 涨跌幅直方图
-                fig_hist = px.histogram(
-                    df,
-                    x='changePercent',
-                    nbins=30,
-                    title="涨跌幅分布",
-                    labels={'changePercent': '涨跌幅(%)', 'count': '股票数量'}
-                )
-                st.plotly_chart(fig_hist, use_container_width=True)
-            
-            with col2:
-                # 涨跌幅TOP 10
-                top_changes = df.nlargest(10, 'changePercent')[['code', 'name', 'changePercent', 'explosionCount']].copy()
-                # 转换为中文列名
-                col_mapping = {
-                    'code': '代码',
-                    'name': '名称',
-                    'changePercent': '涨跌幅(%)',
-                    'explosionCount': '炸板次数'
-                }
-                top_changes = top_changes.rename(columns=col_mapping)
-                st.dataframe(top_changes, use_container_width=True)
-        
         # 成交额TOP 10
         if 'turnover' in df.columns:
             st.markdown("#### 💰 成交额TOP 10")

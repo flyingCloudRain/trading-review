@@ -35,6 +35,22 @@ class TradingReviewService:
             stock_code = "未知"
             stock_name = "未知"
         
+        # 处理关联关系
+        parent_id = review_data.get('parentId')
+        trade_group_id = review_data.get('tradeGroupId')
+        
+        # 如果是卖出操作，自动查找匹配的买入记录
+        if review_data['operation'] == 'sell' and not parent_id:
+            parent_id = TradingReviewService._find_matching_buy_record(
+                db, stock_code, stock_name, review_data.get('quantity')
+            )
+        
+        # 如果没有指定 trade_group_id，自动生成或查找
+        if not trade_group_id:
+            trade_group_id = TradingReviewService._get_or_create_trade_group_id(
+                db, stock_code, stock_name, parent_id
+            )
+        
         # 创建记录
         review = TradingReview(
             date=review_data['date'],
@@ -51,11 +67,18 @@ class TradingReviewService:
             profit_percent=review_data.get('profitPercent'),
             take_profit_price=review_data.get('takeProfitPrice'),
             stop_loss_price=review_data.get('stopLossPrice'),
+            parent_id=parent_id,
+            trade_group_id=trade_group_id,
         )
         
         db.add(review)
         db.commit()
         db.refresh(review)
+        
+        # 如果是卖出记录且关联了买入记录，自动计算盈亏
+        if review.operation == 'sell' and review.parent_id:
+            TradingReviewService._calculate_profit_for_sell(db, review)
+        
         return review
     
     @staticmethod
@@ -161,6 +184,17 @@ class TradingReviewService:
         if 'stopLossPrice' in review_data:
             review.stop_loss_price = review_data['stopLossPrice']
         
+        # 更新关联字段
+        if 'parentId' in review_data:
+            review.parent_id = review_data['parentId']
+        
+        if 'tradeGroupId' in review_data:
+            review.trade_group_id = review_data['tradeGroupId']
+        
+        # 如果是卖出记录且关联了买入记录，重新计算盈亏
+        if review.operation == 'sell' and review.parent_id:
+            TradingReviewService._calculate_profit_for_sell(db, review)
+        
         db.commit()
         db.refresh(review)
         return review
@@ -234,4 +268,151 @@ class TradingReviewService:
             datetime.strptime(date, '%Y-%m-%d')
         except ValueError:
             raise ValueError('Invalid date')
+    
+    @staticmethod
+    def _find_matching_buy_record(db: Session, stock_code: str, stock_name: str, sell_quantity: Optional[int] = None) -> Optional[int]:
+        """
+        查找匹配的买入记录（用于卖出记录关联）
+        
+        策略：
+        1. 查找同一只股票（代码或名称匹配）
+        2. 查找未完全卖出的买入记录（买入数量 > 已卖出数量）
+        3. 优先匹配最早买入且未完全卖出的记录
+        """
+        # 查找同一只股票的买入记录
+        buy_records = db.query(TradingReview).filter(
+            TradingReview.operation == 'buy',
+            TradingReview.stock_code == stock_code
+        ).order_by(TradingReview.date.asc(), TradingReview.created_at.asc()).all()
+        
+        if not buy_records:
+            return None
+        
+        # 查找未完全卖出的买入记录
+        for buy_record in buy_records:
+            # 计算该买入记录已卖出的数量
+            sold_quantity = db.query(func.sum(TradingReview.quantity)).filter(
+                TradingReview.parent_id == buy_record.id,
+                TradingReview.operation == 'sell'
+            ).scalar() or 0
+            
+            # 计算剩余可卖出数量
+            remaining_quantity = buy_record.quantity - sold_quantity
+            
+            # 如果还有剩余数量，且卖出数量不超过剩余数量，则匹配
+            if remaining_quantity > 0:
+                if sell_quantity is None or sell_quantity <= remaining_quantity:
+                    return buy_record.id
+        
+        return None
+    
+    @staticmethod
+    def _get_or_create_trade_group_id(db: Session, stock_code: str, stock_name: str, parent_id: Optional[int] = None) -> Optional[int]:
+        """
+        获取或创建交易组ID
+        
+        策略：
+        1. 如果有 parent_id，使用父记录的 trade_group_id
+        2. 否则，查找同一只股票的最新交易组ID
+        3. 如果没有找到，创建新的交易组ID（使用当前最大ID+1）
+        """
+        # 如果有父记录，使用父记录的 trade_group_id
+        if parent_id:
+            parent_record = db.query(TradingReview).filter(TradingReview.id == parent_id).first()
+            if parent_record and parent_record.trade_group_id:
+                return parent_record.trade_group_id
+        
+        # 查找同一只股票的最新交易组ID
+        latest_record = db.query(TradingReview).filter(
+            TradingReview.stock_code == stock_code
+        ).order_by(TradingReview.trade_group_id.desc().nullslast(), TradingReview.created_at.desc()).first()
+        
+        if latest_record and latest_record.trade_group_id:
+            return latest_record.trade_group_id
+        
+        # 创建新的交易组ID（使用当前最大ID+1）
+        max_group_id = db.query(func.max(TradingReview.trade_group_id)).scalar()
+        if max_group_id:
+            return max_group_id + 1
+        else:
+            # 如果没有现有记录，使用1作为起始ID
+            return 1
+    
+    @staticmethod
+    def _calculate_profit_for_sell(db: Session, sell_record: TradingReview):
+        """
+        为卖出记录计算盈亏
+        
+        基于关联的买入记录计算：
+        - 盈亏金额 = (卖出价格 - 买入价格) * 卖出数量
+        - 盈亏比例 = (卖出价格 - 买入价格) / 买入价格 * 100
+        """
+        if not sell_record.parent_id:
+            return
+        
+        buy_record = db.query(TradingReview).filter(TradingReview.id == sell_record.parent_id).first()
+        if not buy_record:
+            return
+        
+        # 计算盈亏
+        buy_price = buy_record.price
+        sell_price = sell_record.price
+        sell_quantity = sell_record.quantity
+        
+        profit_amount = (sell_price - buy_price) * sell_quantity
+        profit_percent = ((sell_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
+        
+        # 更新卖出记录的盈亏
+        sell_record.profit = profit_amount
+        sell_record.profit_percent = profit_percent
+        
+        db.commit()
+    
+    @staticmethod
+    def get_reviews_by_trade_group(db: Session, trade_group_id: int) -> List[TradingReview]:
+        """根据交易组ID获取所有相关记录"""
+        return db.query(TradingReview).filter(
+            TradingReview.trade_group_id == trade_group_id
+        ).order_by(TradingReview.date.asc(), TradingReview.created_at.asc()).all()
+    
+    @staticmethod
+    def get_related_reviews(db: Session, review_id: int) -> Dict[str, List[TradingReview]]:
+        """
+        获取关联的交易记录
+        
+        返回：
+        {
+            'parent': 父记录（如果是卖出记录，返回对应的买入记录）,
+            'children': 子记录列表（如果是买入记录，返回所有关联的卖出记录）,
+            'trade_group': 同一交易组的所有记录
+        }
+        """
+        review = TradingReviewService.get_review_by_id(db, review_id)
+        if not review:
+            return {'parent': [], 'children': [], 'trade_group': []}
+        
+        result = {
+            'parent': [],
+            'children': [],
+            'trade_group': []
+        }
+        
+        # 获取父记录
+        if review.parent_id:
+            parent = TradingReviewService.get_review_by_id(db, review.parent_id)
+            if parent:
+                result['parent'] = [parent]
+        
+        # 获取子记录
+        children = db.query(TradingReview).filter(
+            TradingReview.parent_id == review_id
+        ).order_by(TradingReview.date.asc(), TradingReview.created_at.asc()).all()
+        result['children'] = children
+        
+        # 获取同一交易组的记录
+        if review.trade_group_id:
+            trade_group = TradingReviewService.get_reviews_by_trade_group(db, review.trade_group_id)
+            result['trade_group'] = [r for r in trade_group if r.id != review_id]
+        
+        return result
 
